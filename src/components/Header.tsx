@@ -1,3 +1,4 @@
+
 import { Button } from "@/components/ui/button";
 
 export const Header = () => {
@@ -5,7 +6,7 @@ export const Header = () => {
     <header className="w-full py-4 px-6 bg-white shadow-sm">
       <div className="max-w-7xl mx-auto flex justify-between items-center">
         <div className="flex items-center space-x-2">
-          <img src="/lovable-uploads/3f9def01-0f14-414b-b058-4ae06becfa1c.png" alt="Logo" className="h-10" />
+          <img src="/lovable-uploads/5b6ee081-dfcb-4a52-9769-6dff8e394dd6.png" alt="Logo" className="h-10" />
           <span className="text-2xl font-bold text-primary">shh.ai</span>
         </div>
         <nav className="flex items-center space-x-6">
