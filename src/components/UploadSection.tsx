@@ -4,6 +4,7 @@ import { Upload, Camera, FileText } from "lucide-react";
 import { useState } from "react";
 import { useToast } from "@/components/ui/use-toast";
 import { pipeline } from "@huggingface/transformers";
+import { useNavigate } from "react-router-dom";
 
 // Define the type for the model output
 type ImageToTextResult = {
@@ -12,6 +13,7 @@ type ImageToTextResult = {
 
 export const UploadSection = () => {
   const { toast } = useToast();
+  const navigate = useNavigate();
   const [isAnalyzing, setIsAnalyzing] = useState(false);
 
   const analyzePrescription = async (imageData: string) => {
@@ -32,11 +34,28 @@ export const UploadSection = () => {
         
         toast({
           title: "تم تحليل الوصفة الطبية بنجاح",
-          description: "جاري البحث عن معلومات الدواء...",
+          description: "جاري معالجة المعلومات...",
         });
-        
-        // Here you can add logic to fetch drug information from Mayo Clinic
-        console.log("Detected text:", detectedText);
+
+        // Mock data for demonstration - in a real app, this would come from Mayo Clinic API
+        const mockMedications = [
+          {
+            name: "دواء تجريبي",
+            dosage: "قرص واحد مرتين يومياً",
+            instructions: "يؤخذ بعد الطعام",
+            warnings: "قد يسبب النعاس"
+          }
+        ];
+
+        // Navigate to the details page with the prescription data
+        navigate("/prescription-details", {
+          state: {
+            prescriptionData: {
+              detectedText,
+              medications: mockMedications
+            }
+          }
+        });
       }
     } catch (error) {
       console.error("Error analyzing prescription:", error);
