@@ -5,6 +5,11 @@ import { useState } from "react";
 import { useToast } from "@/components/ui/use-toast";
 import { pipeline } from "@huggingface/transformers";
 
+// Define the type for the model output
+type ImageToTextResult = {
+  generated_text: string;
+};
+
 export const UploadSection = () => {
   const { toast } = useToast();
   const [isAnalyzing, setIsAnalyzing] = useState(false);
@@ -12,7 +17,6 @@ export const UploadSection = () => {
   const analyzePrescription = async (imageData: string) => {
     setIsAnalyzing(true);
     try {
-      // Using a different model that's available for browser usage
       const textDetectionModel = await pipeline(
         "image-to-text",
         "Xenova/vit-gpt2-image-captioning"
@@ -23,7 +27,8 @@ export const UploadSection = () => {
       
       // تحليل النص وإرسال طلب للحصول على معلومات الدواء
       if (result && Array.isArray(result) && result.length > 0) {
-        const detectedText = result[0].generated_text || "";
+        const output = result[0] as ImageToTextResult;
+        const detectedText = output.generated_text;
         
         toast({
           title: "تم تحليل الوصفة الطبية بنجاح",
