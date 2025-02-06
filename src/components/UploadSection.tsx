@@ -12,26 +12,29 @@ export const UploadSection = () => {
   const analyzePrescription = async (imageData: string) => {
     setIsAnalyzing(true);
     try {
-      // إنشاء نموذج للتعرف على النص
+      // Using a different model that's available for browser usage
       const textDetectionModel = await pipeline(
         "image-to-text",
-        "microsoft/trocr-base-handwritten"
+        "Xenova/vit-gpt2-image-captioning"
       );
 
       // تحليل الصورة
       const result = await textDetectionModel(imageData);
       
       // تحليل النص وإرسال طلب للحصول على معلومات الدواء
-      if (result && result[0]?.text) {
+      if (result && Array.isArray(result) && result.length > 0) {
+        const detectedText = result[0].generated_text || "";
+        
         toast({
           title: "تم تحليل الوصفة الطبية بنجاح",
           description: "جاري البحث عن معلومات الدواء...",
         });
         
-        // هنا يمكن إضافة المنطق لاسترجاع معلومات الدواء من Mayo Clinic
-        // عن طريق API أو web scraping
+        // Here you can add logic to fetch drug information from Mayo Clinic
+        console.log("Detected text:", detectedText);
       }
     } catch (error) {
+      console.error("Error analyzing prescription:", error);
       toast({
         variant: "destructive",
         title: "حدث خطأ",
