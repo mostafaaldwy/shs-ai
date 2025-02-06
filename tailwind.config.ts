@@ -69,11 +69,22 @@ export default {
           "0%, 100%": { transform: "translateY(0)" },
           "50%": { transform: "translateY(-5px)" },
         },
+        glow: {
+          "0%, 100%": {
+            "box-shadow": "0 0 20px 2px rgba(34, 197, 94, 0)",
+            transform: "scale(1)",
+          },
+          "50%": {
+            "box-shadow": "0 0 20px 2px rgba(34, 197, 94, 0.3)",
+            transform: "scale(1.01)",
+          },
+        },
       },
       animation: {
         "accordion-down": "accordion-down 0.2s ease-out",
         "accordion-up": "accordion-up 0.2s ease-out",
         float: "float 3s ease-in-out infinite",
+        glow: "glow 2s ease-in-out infinite",
       },
     },
   },

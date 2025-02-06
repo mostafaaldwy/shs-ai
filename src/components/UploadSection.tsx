@@ -92,7 +92,7 @@ export const UploadSection = () => {
   };
 
   return (
-    <div className="w-full max-w-4xl mx-auto p-6">
+    <div id="upload-section" className="w-full max-w-4xl mx-auto p-6 transition-all duration-500">
       <Card className="p-8 bg-white shadow-lg rounded-lg">
         <div className="space-y-6">
           <div className="text-center space-y-4">
