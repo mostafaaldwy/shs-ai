@@ -1,13 +1,66 @@
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Upload, Camera, FileText } from "lucide-react";
+import { useState } from "react";
+import { useToast } from "@/components/ui/use-toast";
+import { pipeline } from "@huggingface/transformers";
 
 export const UploadSection = () => {
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const { toast } = useToast();
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+
+  const analyzePrescription = async (imageData: string) => {
+    setIsAnalyzing(true);
+    try {
+      // إنشاء نموذج للتعرف على النص
+      const textDetectionModel = await pipeline(
+        "image-to-text",
+        "microsoft/trocr-base-handwritten"
+      );
+
+      // تحليل الصورة
+      const result = await textDetectionModel(imageData);
+      
+      // تحليل النص وإرسال طلب للحصول على معلومات الدواء
+      if (result && result[0]?.text) {
+        toast({
+          title: "تم تحليل الوصفة الطبية بنجاح",
+          description: "جاري البحث عن معلومات الدواء...",
+        });
+        
+        // هنا يمكن إضافة المنطق لاسترجاع معلومات الدواء من Mayo Clinic
+        // عن طريق API أو web scraping
+      }
+    } catch (error) {
+      toast({
+        variant: "destructive",
+        title: "حدث خطأ",
+        description: "لم نتمكن من تحليل الوصفة الطبية. يرجى المحاولة مرة أخرى.",
+      });
+    } finally {
+      setIsAnalyzing(false);
+    }
+  };
+
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      // Handle file upload logic here
-      console.log("File uploaded:", file);
+      if (!file.type.startsWith('image/')) {
+        toast({
+          variant: "destructive",
+          title: "نوع الملف غير مدعوم",
+          description: "يرجى تحميل صورة فقط",
+        });
+        return;
+      }
+
+      const reader = new FileReader();
+      reader.onload = async (event) => {
+        if (event.target?.result) {
+          await analyzePrescription(event.target.result as string);
+        }
+      };
+      reader.readAsDataURL(file);
     }
   };
 
@@ -27,6 +80,7 @@ export const UploadSection = () => {
               variant="outline"
               className="h-32 flex flex-col items-center justify-center space-y-2 border-2 border-dashed hover:border-primary hover:bg-primary/5"
               onClick={() => document.getElementById("camera-input")?.click()}
+              disabled={isAnalyzing}
             >
               <Camera className="h-8 w-8 text-primary" />
               <span>التقاط صورة</span>
@@ -37,6 +91,7 @@ export const UploadSection = () => {
                 capture="environment"
                 className="hidden"
                 onChange={handleFileUpload}
+                disabled={isAnalyzing}
               />
             </Button>
 
@@ -44,6 +99,7 @@ export const UploadSection = () => {
               variant="outline"
               className="h-32 flex flex-col items-center justify-center space-y-2 border-2 border-dashed hover:border-primary hover:bg-primary/5"
               onClick={() => document.getElementById("image-input")?.click()}
+              disabled={isAnalyzing}
             >
               <Upload className="h-8 w-8 text-primary" />
               <span>تحميل صورة</span>
@@ -53,6 +109,7 @@ export const UploadSection = () => {
                 accept="image/*"
                 className="hidden"
                 onChange={handleFileUpload}
+                disabled={isAnalyzing}
               />
             </Button>
 
@@ -60,6 +117,7 @@ export const UploadSection = () => {
               variant="outline"
               className="h-32 flex flex-col items-center justify-center space-y-2 border-2 border-dashed hover:border-primary hover:bg-primary/5"
               onClick={() => document.getElementById("file-input")?.click()}
+              disabled={isAnalyzing}
             >
               <FileText className="h-8 w-8 text-primary" />
               <span>تحميل ملف</span>
@@ -69,6 +127,7 @@ export const UploadSection = () => {
                 accept=".pdf,image/*"
                 className="hidden"
                 onChange={handleFileUpload}
+                disabled={isAnalyzing}
               />
             </Button>
           </div>

@@ -18,11 +18,16 @@ export const Hero = () => {
               ابدأ الآن مجاناً
             </Button>
           </div>
-          <div className="md:w-1/2 mt-10 md:mt-0">
+          <div className="md:w-1/2 mt-10 md:mt-0 flex gap-4">
             <img
-              src="/lovable-uploads/3f9def01-0f14-414b-b058-4ae06becfa1c.png"
-              alt="Medical Consultation"
-              className="w-full max-w-lg mx-auto rounded-lg shadow-xl animate-float"
+              src="https://images.unsplash.com/photo-1559839734-2b71ea197ec2"
+              alt="Doctor"
+              className="w-1/2 h-auto rounded-lg shadow-xl"
+            />
+            <img
+              src="https://images.unsplash.com/photo-1622253692010-333f2da6031d"
+              alt="Female Doctor"
+              className="w-1/2 h-auto rounded-lg shadow-xl"
             />
           </div>
         </div>
