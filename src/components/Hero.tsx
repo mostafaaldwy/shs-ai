@@ -39,14 +39,9 @@ export const Hero = () => {
           </div>
           <div className="md:w-1/2 mt-10 md:mt-0 flex gap-4">
             <img
-              src="https://images.unsplash.com/photo-1559839734-2b71ea197ec2"
-              alt="Doctor"
-              className="w-1/2 h-auto rounded-lg shadow-xl"
-            />
-            <img
-              src="https://images.unsplash.com/photo-1622253692010-333f2da6031d"
-              alt="Female Doctor"
-              className="w-1/2 h-auto rounded-lg shadow-xl"
+              src="/lovable-uploads/bea31716-bc30-4bea-b4b5-48805058755d.png"
+              alt="Doctors"
+              className="w-full h-auto rounded-lg shadow-xl"
             />
           </div>
         </div>
