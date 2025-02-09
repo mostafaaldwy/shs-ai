@@ -18,6 +18,7 @@ export const UploadSection = () => {
   const navigate = useNavigate();
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [progress, setProgress] = useState(0);
+  const [statusMessage, setStatusMessage] = useState("");
 
   const analyzePrescription = async (imageData: string) => {
     const { data: { user } } = await supabase.auth.getUser();
@@ -33,30 +34,37 @@ export const UploadSection = () => {
     }
 
     setIsAnalyzing(true);
-    setProgress(25);
+    setProgress(10);
+    setStatusMessage("جاري تحميل الصورة...");
     
     try {
       // Show initial progress for OCR
-      setProgress(35);
+      setProgress(30);
+      setStatusMessage("جاري تحليل النص من الصورة...");
+      
       const textDetectionModel = await pipeline(
         "image-to-text",
         "Xenova/vit-gpt2-image-captioning"
       );
 
       setProgress(50);
+      setStatusMessage("تم اكتشاف النص، جاري التحليل...");
+      
       const result = await textDetectionModel(imageData);
       
       if (result && Array.isArray(result) && result.length > 0) {
         const output = result[0] as ImageToTextResult;
         const detectedText = output.generated_text;
         
-        setProgress(75);
+        setProgress(70);
+        setStatusMessage("جاري حفظ المعلومات...");
+        
         // Save to Supabase
         const { data: prescriptionData, error } = await supabase
           .from("Patient name")
           .insert({
             "Medical prescription": detectedText,
-            describe: "Prescription Analysis",
+            describe: "تحليل الوصفة الطبية",
             user_id: user.id
           })
           .select()
@@ -64,7 +72,9 @@ export const UploadSection = () => {
 
         if (error) throw error;
 
-        setProgress(90);
+        setProgress(85);
+        setStatusMessage("جاري تحليل الوصفة الطبية...");
+        
         // Analyze the prescription with AI
         const { data: analysisData, error: analysisError } = await supabase.functions
           .invoke('analyze-prescription', {
@@ -77,6 +87,8 @@ export const UploadSection = () => {
         if (analysisError) throw analysisError;
 
         setProgress(100);
+        setStatusMessage("اكتمل التحليل!");
+        
         toast({
           title: "تم تحليل الوصفة الطبية بنجاح",
           description: "تم استخراج المعلومات الطبية",
@@ -101,6 +113,7 @@ export const UploadSection = () => {
     } finally {
       setIsAnalyzing(false);
       setProgress(0);
+      setStatusMessage("");
     }
   };
 
@@ -140,7 +153,7 @@ export const UploadSection = () => {
           {isAnalyzing && (
             <div className="space-y-4">
               <Progress value={progress} className="w-full" />
-              <p className="text-center text-primary">جاري تحليل الوصفة الطبية... يرجى الانتظار</p>
+              <p className="text-center text-primary">{statusMessage}</p>
             </div>
           )}
 

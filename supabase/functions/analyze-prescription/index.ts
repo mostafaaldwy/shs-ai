@@ -31,23 +31,29 @@ serve(async (req) => {
           {
             role: 'system',
             content: `You are a medical expert that analyzes prescriptions. Extract the following information in Arabic:
-              - Medication name
-              - Dosage
-              - Frequency of use
-              - Usage instructions
-              - Potential side effects
-              - Contraindications
+              - Medication name (اسم الدواء)
+              - Dosage (الجرعة)
+              - Frequency of use (عدد مرات الاستخدام)
+              - Usage instructions (تعليمات الاستخدام)
+              - Potential side effects (الآثار الجانبية المحتملة)
+              - Contraindications (موانع الاستعمال)
               Structure the response as a JSON object with these fields.`
           },
           {
             role: 'user',
-            content: `Analyze this prescription text: ${imageData}`
+            content: `Analyze this prescription data: ${imageData}`
           }
         ],
       }),
     })
 
     console.log('Received OpenAI response...')
+
+    if (!response.ok) {
+      const errorData = await response.text()
+      console.error('OpenAI API error:', errorData)
+      throw new Error(`OpenAI API error: ${errorData}`)
+    }
 
     const aiResult = await response.json()
     const analysis = JSON.parse(aiResult.choices[0].message.content)
