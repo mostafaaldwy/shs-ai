@@ -1,3 +1,4 @@
+
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Upload, Camera, FileText } from "lucide-react";
@@ -5,7 +6,7 @@ import { useState } from "react";
 import { useToast } from "@/components/ui/use-toast";
 import { pipeline } from "@huggingface/transformers";
 import { useNavigate } from "react-router-dom";
-import { supabase } from "@/lib/supabase";
+import { supabase } from "@/integrations/supabase/client";
 
 // Define the type for the model output
 type ImageToTextResult = {

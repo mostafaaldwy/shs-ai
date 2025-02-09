@@ -10,6 +10,7 @@ interface Prescription {
   created_at: string;
   Medical_prescription: string | null;
   describe: string | null;
+  user_id: string;
 }
 
 export default function Dashboard() {
@@ -33,7 +34,7 @@ export default function Dashboard() {
           .order("created_at", { ascending: false });
 
         if (error) throw error;
-        setPrescriptions(data || []);
+        setPrescriptions(data as Prescription[] || []);
       } catch (error: any) {
         toast({
           variant: "destructive",
