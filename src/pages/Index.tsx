@@ -1,6 +1,8 @@
+
 import { Header } from "@/components/Header";
 import { Hero } from "@/components/Hero";
 import { UploadSection } from "@/components/UploadSection";
+import { Navigation } from "@/components/Navigation";
 
 const Index = () => {
   return (
@@ -8,6 +10,7 @@ const Index = () => {
       <Header />
       <Hero />
       <UploadSection />
+      <Navigation />
     </div>
   );
 };

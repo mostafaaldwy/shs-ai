@@ -3,10 +3,11 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Upload, Camera, FileText } from "lucide-react";
 import { useState } from "react";
-import { useToast } from "@/components/ui/use-toast";
+import { useToast } from "@/hooks/use-toast";
 import { pipeline } from "@huggingface/transformers";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
+import { Progress } from "@/components/ui/progress";
 
 type ImageToTextResult = {
   generated_text: string;
@@ -16,6 +17,7 @@ export const UploadSection = () => {
   const { toast } = useToast();
   const navigate = useNavigate();
   const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [progress, setProgress] = useState(0);
 
   const analyzePrescription = async (imageData: string) => {
     const { data: { user } } = await supabase.auth.getUser();
@@ -31,18 +33,24 @@ export const UploadSection = () => {
     }
 
     setIsAnalyzing(true);
+    setProgress(25);
+    
     try {
+      // Show initial progress for OCR
+      setProgress(35);
       const textDetectionModel = await pipeline(
         "image-to-text",
         "Xenova/vit-gpt2-image-captioning"
       );
 
+      setProgress(50);
       const result = await textDetectionModel(imageData);
       
       if (result && Array.isArray(result) && result.length > 0) {
         const output = result[0] as ImageToTextResult;
         const detectedText = output.generated_text;
         
+        setProgress(75);
         // Save to Supabase
         const { data: prescriptionData, error } = await supabase
           .from("Patient name")
@@ -56,6 +64,7 @@ export const UploadSection = () => {
 
         if (error) throw error;
 
+        setProgress(90);
         // Analyze the prescription with AI
         const { data: analysisData, error: analysisError } = await supabase.functions
           .invoke('analyze-prescription', {
@@ -67,6 +76,7 @@ export const UploadSection = () => {
 
         if (analysisError) throw analysisError;
 
+        setProgress(100);
         toast({
           title: "تم تحليل الوصفة الطبية بنجاح",
           description: "تم استخراج المعلومات الطبية",
@@ -90,6 +100,7 @@ export const UploadSection = () => {
       });
     } finally {
       setIsAnalyzing(false);
+      setProgress(0);
     }
   };
 
@@ -126,6 +137,13 @@ export const UploadSection = () => {
             </p>
           </div>
           
+          {isAnalyzing && (
+            <div className="space-y-4">
+              <Progress value={progress} className="w-full" />
+              <p className="text-center text-primary">جاري تحليل الوصفة الطبية... يرجى الانتظار</p>
+            </div>
+          )}
+
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-8">
             <Button
               variant="outline"

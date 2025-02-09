@@ -3,7 +3,8 @@ import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Card } from "@/components/ui/card";
 import { useNavigate } from "react-router-dom";
-import { useToast } from "@/components/ui/use-toast";
+import { useToast } from "@/hooks/use-toast";
+import { Navigation } from "@/components/Navigation";
 
 interface Prescription {
   id: number;
@@ -50,7 +51,12 @@ export default function Dashboard() {
   }, []);
 
   if (loading) {
-    return <div className="flex justify-center items-center min-h-screen">جاري التحميل...</div>;
+    return (
+      <div className="flex justify-center items-center min-h-screen">
+        جاري التحميل...
+        <Navigation />
+      </div>
+    );
   }
 
   return (
@@ -84,6 +90,8 @@ export default function Dashboard() {
           لا توجد وصفات طبية حتى الآن
         </div>
       )}
+      
+      <Navigation />
     </div>
   );
-}
+};
