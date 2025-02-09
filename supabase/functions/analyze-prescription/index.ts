@@ -18,15 +18,21 @@ serve(async (req) => {
 
     console.log('Starting prescription analysis...')
 
-    // Initialize OpenAI
+    // Check if OpenAI API key is available
+    const openAiKey = Deno.env.get('OPENAI_API_KEY')
+    if (!openAiKey) {
+      throw new Error('OpenAI API key is not configured')
+    }
+
+    // Initialize OpenAI with better error handling
     const response = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${Deno.env.get('OPENAI_API_KEY')}`,
+        'Authorization': `Bearer ${openAiKey}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'gpt-4o-mini',
+        model: 'gpt-4o-mini', // Using the more cost-effective model
         messages: [
           {
             role: 'system',
@@ -44,21 +50,38 @@ serve(async (req) => {
             content: `Analyze this prescription data: ${imageData}`
           }
         ],
+        temperature: 0.7, // Added temperature for more consistent responses
+        max_tokens: 500 // Limiting response length to reduce token usage
       }),
     })
 
-    console.log('Received OpenAI response...')
+    console.log('Received OpenAI response with status:', response.status)
 
     if (!response.ok) {
       const errorData = await response.text()
       console.error('OpenAI API error:', errorData)
+      
+      // Handle specific error cases
+      if (response.status === 429 || errorData.includes('insufficient_quota')) {
+        return new Response(
+          JSON.stringify({ 
+            error: 'عذراً، تم تجاوز حد الاستخدام المسموح به. يرجى المحاولة لاحقاً.',
+            technical_details: errorData 
+          }),
+          { 
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            status: 429
+          }
+        )
+      }
+      
       throw new Error(`OpenAI API error: ${errorData}`)
     }
 
     const aiResult = await response.json()
-    const analysis = JSON.parse(aiResult.choices[0].message.content)
+    console.log('Parsed AI response:', aiResult)
 
-    console.log('Parsed analysis result:', analysis)
+    const analysis = JSON.parse(aiResult.choices[0].message.content)
 
     // Update the prescription in the database with the AI analysis
     const supabase = createClient(
@@ -95,9 +118,28 @@ serve(async (req) => {
 
   } catch (error) {
     console.error('Error in analyze-prescription function:', error)
+    
+    // Determine appropriate error message based on error type
+    let errorMessage = 'حدث خطأ أثناء تحليل الوصفة الطبية'
+    let statusCode = 500
+    
+    if (error.message.includes('OpenAI API key is not configured')) {
+      errorMessage = 'لم يتم تكوين مفتاح API للذكاء الاصطناعي'
+      statusCode = 403
+    } else if (error.message.includes('insufficient_quota')) {
+      errorMessage = 'عذراً، تم تجاوز حد الاستخدام المسموح به. يرجى المحاولة لاحقاً.'
+      statusCode = 429
+    }
+
     return new Response(
-      JSON.stringify({ error: error.message }),
-      { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 }
+      JSON.stringify({ 
+        error: errorMessage,
+        technical_details: error.message 
+      }),
+      { 
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        status: statusCode
+      }
     )
   }
 })
