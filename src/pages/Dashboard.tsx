@@ -8,7 +8,7 @@ import { useToast } from "@/components/ui/use-toast";
 interface Prescription {
   id: number;
   created_at: string;
-  Medical_prescription: string | null;
+  "Medical prescription": string | null;
   describe: string | null;
   user_id: string;
 }
@@ -34,7 +34,7 @@ export default function Dashboard() {
           .order("created_at", { ascending: false });
 
         if (error) throw error;
-        setPrescriptions(data as Prescription[] || []);
+        setPrescriptions(data || []);
       } catch (error: any) {
         toast({
           variant: "destructive",
@@ -68,7 +68,7 @@ export default function Dashboard() {
               </div>
               <div className="space-y-2">
                 <h3 className="font-semibold">الوصفة الطبية</h3>
-                <p className="text-gray-600 line-clamp-3">{prescription.Medical_prescription}</p>
+                <p className="text-gray-600 line-clamp-3">{prescription["Medical prescription"]}</p>
               </div>
               <div className="space-y-2">
                 <h3 className="font-semibold">التقرير</h3>
