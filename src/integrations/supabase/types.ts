@@ -15,18 +15,21 @@ export type Database = {
           describe: string | null
           id: number
           "Medical prescription": string | null
+          user_id: string
         }
         Insert: {
           created_at?: string
           describe?: string | null
           id?: number
           "Medical prescription"?: string | null
+          user_id: string
         }
         Update: {
           created_at?: string
           describe?: string | null
           id?: number
           "Medical prescription"?: string | null
+          user_id?: string
         }
         Relationships: []
       }

@@ -5,6 +5,7 @@ import { useState } from "react";
 import { useToast } from "@/components/ui/use-toast";
 import { pipeline } from "@huggingface/transformers";
 import { useNavigate } from "react-router-dom";
+import { supabase } from "@/lib/supabase";
 
 // Define the type for the model output
 type ImageToTextResult = {
@@ -17,6 +18,18 @@ export const UploadSection = () => {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
 
   const analyzePrescription = async (imageData: string) => {
+    const { data: { user } } = await supabase.auth.getUser();
+    
+    if (!user) {
+      toast({
+        variant: "destructive",
+        title: "يجب تسجيل الدخول",
+        description: "يرجى تسجيل الدخول لاستخدام هذه الخدمة",
+      });
+      navigate("/auth");
+      return;
+    }
+
     setIsAnalyzing(true);
     try {
       const textDetectionModel = await pipeline(
@@ -24,20 +37,29 @@ export const UploadSection = () => {
         "Xenova/vit-gpt2-image-captioning"
       );
 
-      // تحليل الصورة
       const result = await textDetectionModel(imageData);
       
-      // تحليل النص وإرسال طلب للحصول على معلومات الدواء
       if (result && Array.isArray(result) && result.length > 0) {
         const output = result[0] as ImageToTextResult;
         const detectedText = output.generated_text;
         
+        // Save to Supabase
+        const { error } = await supabase
+          .from("Patient name")
+          .insert({
+            "Medical prescription": detectedText,
+            describe: "Test description", // This will be updated with AI analysis
+            user_id: user.id
+          });
+
+        if (error) throw error;
+
         toast({
           title: "تم تحليل الوصفة الطبية بنجاح",
           description: "جاري معالجة المعلومات...",
         });
 
-        // Mock data for demonstration - in a real app, this would come from Mayo Clinic API
+        // Mock data for demonstration
         const mockMedications = [
           {
             name: "دواء تجريبي",
@@ -47,7 +69,6 @@ export const UploadSection = () => {
           }
         ];
 
-        // Navigate to the details page with the prescription data
         navigate("/prescription-details", {
           state: {
             prescriptionData: {

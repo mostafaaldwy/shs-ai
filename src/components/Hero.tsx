@@ -1,3 +1,4 @@
+
 import { Button } from "@/components/ui/button";
 import { useNavigate } from "react-router-dom";
 
@@ -9,7 +10,6 @@ export const Hero = () => {
     if (uploadSection) {
       uploadSection.scrollIntoView({ behavior: 'smooth' });
       uploadSection.classList.add('animate-glow');
-      // Remove animation class after animation completes
       setTimeout(() => {
         uploadSection.classList.remove('animate-glow');
       }, 2000);
@@ -27,7 +27,7 @@ export const Hero = () => {
               <span className="text-primary">بسهولة وذكاء</span>
             </h1>
             <p className="text-lg text-gray-600 max-w-xl">
-              نستخدم الذكاء الاصطناعي لمساعدتك في فهم وصفتك الطبية وتعليمات استخدام الدواء بشكل واضح وسهل
+              نستخدم الذكاء الاصطناعي ليوفر لك معلومات عن دوائك بدقة، مستمدة من الموسوعة الدوائية الأولى عالميًا (Micromedex) وذلك لضمان الموثوقية في كل معلومة.
             </p>
             <Button 
               size="lg" 
@@ -39,8 +39,8 @@ export const Hero = () => {
           </div>
           <div className="md:w-1/2 mt-10 md:mt-0 flex gap-4">
             <img
-              src="/lovable-uploads/bea31716-bc30-4bea-b4b5-48805058755d.png"
-              alt="Doctors"
+              src="/lovable-uploads/3f9def01-0f14-414b-b058-4ae06becfa1c.png"
+              alt="Healthcare"
               className="w-full h-auto rounded-lg shadow-xl"
             />
           </div>
