@@ -11,24 +11,45 @@ export type Database = {
     Tables: {
       "Patient name": {
         Row: {
+          contraindications: string | null
           created_at: string
           describe: string | null
+          dosage: string | null
+          frequency: string | null
           id: number
+          instructions: string | null
           "Medical prescription": string | null
+          medical_notes: string | null
+          medication_name: string | null
+          side_effects: string | null
           user_id: string
         }
         Insert: {
+          contraindications?: string | null
           created_at?: string
           describe?: string | null
+          dosage?: string | null
+          frequency?: string | null
           id?: number
+          instructions?: string | null
           "Medical prescription"?: string | null
+          medical_notes?: string | null
+          medication_name?: string | null
+          side_effects?: string | null
           user_id: string
         }
         Update: {
+          contraindications?: string | null
           created_at?: string
           describe?: string | null
+          dosage?: string | null
+          frequency?: string | null
           id?: number
+          instructions?: string | null
           "Medical prescription"?: string | null
+          medical_notes?: string | null
+          medication_name?: string | null
+          side_effects?: string | null
           user_id?: string
         }
         Relationships: []

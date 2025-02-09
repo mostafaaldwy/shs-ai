@@ -8,7 +8,6 @@ import { pipeline } from "@huggingface/transformers";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 
-// Define the type for the model output
 type ImageToTextResult = {
   generated_text: string;
 };
@@ -45,36 +44,39 @@ export const UploadSection = () => {
         const detectedText = output.generated_text;
         
         // Save to Supabase
-        const { error } = await supabase
+        const { data: prescriptionData, error } = await supabase
           .from("Patient name")
           .insert({
             "Medical prescription": detectedText,
-            describe: "Test description", // This will be updated with AI analysis
+            describe: "Prescription Analysis",
             user_id: user.id
-          });
+          })
+          .select()
+          .single();
 
         if (error) throw error;
 
+        // Analyze the prescription with AI
+        const { data: analysisData, error: analysisError } = await supabase.functions
+          .invoke('analyze-prescription', {
+            body: { 
+              imageData: detectedText,
+              prescriptionId: prescriptionData.id
+            }
+          });
+
+        if (analysisError) throw analysisError;
+
         toast({
           title: "تم تحليل الوصفة الطبية بنجاح",
-          description: "جاري معالجة المعلومات...",
+          description: "تم استخراج المعلومات الطبية",
         });
-
-        // Mock data for demonstration
-        const mockMedications = [
-          {
-            name: "دواء تجريبي",
-            dosage: "قرص واحد مرتين يومياً",
-            instructions: "يؤخذ بعد الطعام",
-            warnings: "قد يسبب النعاس"
-          }
-        ];
 
         navigate("/prescription-details", {
           state: {
             prescriptionData: {
               detectedText,
-              medications: mockMedications
+              analysis: analysisData
             }
           }
         });
