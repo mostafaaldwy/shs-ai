@@ -37,16 +37,19 @@ serve(async (req) => {
             role: "user",
             parts: [
               {
-                text: `أنت خبير طبي يقوم بتحليل الوصفات الطبية. قم بتحليل النص التالي واستخراج المعلومات التالية باللغة العربية:
-                - اسم الدواء
-                - الجرعة
-                - عدد مرات الاستخدام
-                - تعليمات الاستخدام
-                - الآثار الجانبية المحتملة
-                - موانع الاستعمال
-                قم بهيكلة الرد كـ JSON object يحتوي على هذه الحقول.
+                text: `You are a medical expert analyzing prescriptions. Analyze the following text and extract these information in Arabic, returning ONLY a valid JSON object with these exact keys (no additional text):
+                {
+                  "medication_name": "name of medication",
+                  "dosage": "dosage information",
+                  "frequency": "how often to take",
+                  "instructions": "usage instructions",
+                  "side_effects": "possible side effects",
+                  "contraindications": "usage warnings",
+                  "medical_notes": "additional notes if any"
+                }
                 
-                النص: ${imageData}`
+                If no text is provided or text cannot be analyzed, return a JSON with "غير متوفر" for all fields.
+                Text to analyze: ${imageData || "لا يوجد نص"}`
               }
             ]
           }
@@ -82,10 +85,27 @@ serve(async (req) => {
     }
 
     const aiResult = await response.json()
-    console.log('Parsed AI response:', aiResult)
+    console.log('Raw AI response:', aiResult)
 
-    // Extract the response text from Gemini's response structure
-    const analysis = JSON.parse(aiResult.candidates[0].content.parts[0].text)
+    let analysis
+    try {
+      // Extract the response text and parse it as JSON
+      const responseText = aiResult.candidates[0].content.parts[0].text.trim()
+      console.log('Response text to parse:', responseText)
+      analysis = JSON.parse(responseText)
+    } catch (parseError) {
+      console.error('JSON parsing error:', parseError)
+      // If parsing fails, return a default response
+      analysis = {
+        medication_name: "غير متوفر",
+        dosage: "غير متوفر",
+        frequency: "غير متوفر",
+        instructions: "غير متوفر",
+        side_effects: "غير متوفر",
+        contraindications: "غير متوفر",
+        medical_notes: "غير متوفر"
+      }
+    }
 
     // Update the prescription in the database with the AI analysis
     const supabase = createClient(
