@@ -22,7 +22,7 @@ export const Hero = () => {
         <div className="flex flex-col md:flex-row items-center justify-between">
           <div className="md:w-1/2 space-y-6 text-right">
             <h1 className="text-4xl md:text-5xl font-bold text-gray-900">
-              فهم وصفتك الطبية
+              إفهم وصفتك الطبية بسهولة
               <br />
               <span className="text-primary">بسهولة وذكاء</span>
             </h1>
