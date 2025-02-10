@@ -32,7 +32,7 @@ serve(async (req) => {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'gpt-4', // Using the standard model
+        model: 'gpt-4o-mini', // Using the recommended model
         messages: [
           {
             role: 'system',
@@ -50,8 +50,8 @@ serve(async (req) => {
             content: `Analyze this prescription data: ${imageData}`
           }
         ],
-        temperature: 0.5, // Lower temperature for more consistent responses
-        max_tokens: 400 // Reducing token usage
+        temperature: 0.5,
+        max_tokens: 400
       }),
     })
 
