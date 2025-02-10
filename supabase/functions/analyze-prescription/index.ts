@@ -32,7 +32,7 @@ serve(async (req) => {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'gpt-4o-mini', // Using the more cost-effective model
+        model: 'gpt-4', // Using the standard model
         messages: [
           {
             role: 'system',
@@ -50,8 +50,8 @@ serve(async (req) => {
             content: `Analyze this prescription data: ${imageData}`
           }
         ],
-        temperature: 0.7, // Added temperature for more consistent responses
-        max_tokens: 500 // Limiting response length to reduce token usage
+        temperature: 0.5, // Lower temperature for more consistent responses
+        max_tokens: 400 // Reducing token usage
       }),
     })
 
@@ -61,16 +61,16 @@ serve(async (req) => {
       const errorData = await response.text()
       console.error('OpenAI API error:', errorData)
       
-      // Handle specific error cases
+      // Handle rate limiting and quota errors
       if (response.status === 429 || errorData.includes('insufficient_quota')) {
         return new Response(
           JSON.stringify({ 
-            error: 'عذراً، تم تجاوز حد الاستخدام المسموح به. يرجى المحاولة لاحقاً.',
+            error: 'عذراً، النظام مشغول حالياً. يرجى المحاولة بعد دقائق قليلة.',
             technical_details: errorData 
           }),
           { 
             headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-            status: 429
+            status: 503 // Service Unavailable
           }
         )
       }
@@ -119,7 +119,6 @@ serve(async (req) => {
   } catch (error) {
     console.error('Error in analyze-prescription function:', error)
     
-    // Determine appropriate error message based on error type
     let errorMessage = 'حدث خطأ أثناء تحليل الوصفة الطبية'
     let statusCode = 500
     
@@ -127,8 +126,8 @@ serve(async (req) => {
       errorMessage = 'لم يتم تكوين مفتاح API للذكاء الاصطناعي'
       statusCode = 403
     } else if (error.message.includes('insufficient_quota')) {
-      errorMessage = 'عذراً، تم تجاوز حد الاستخدام المسموح به. يرجى المحاولة لاحقاً.'
-      statusCode = 429
+      errorMessage = 'عذراً، النظام مشغول حالياً. يرجى المحاولة بعد دقائق قليلة.'
+      statusCode = 503
     }
 
     return new Response(
