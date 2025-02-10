@@ -16,53 +16,56 @@ serve(async (req) => {
   try {
     const { imageData, prescriptionId } = await req.json()
 
-    console.log('Starting prescription analysis...')
+    console.log('Starting prescription analysis with Gemini AI...')
 
-    // Check if OpenAI API key is available
-    const openAiKey = Deno.env.get('OPENAI_API_KEY')
-    if (!openAiKey) {
-      throw new Error('OpenAI API key is not configured')
+    // Check if Gemini API key is available
+    const geminiKey = Deno.env.get('GIMINAI-AI')
+    if (!geminiKey) {
+      throw new Error('Gemini API key is not configured')
     }
 
-    // Initialize OpenAI with better error handling
-    const response = await fetch('https://api.openai.com/v1/chat/completions', {
+    // Initialize Gemini API with better error handling
+    const response = await fetch('https://generativelanguage.googleapis.com/v1/models/gemini-pro:generateContent', {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${openAiKey}`,
         'Content-Type': 'application/json',
+        'x-goog-api-key': geminiKey,
       },
       body: JSON.stringify({
-        model: 'gpt-4o-mini', // Using the recommended model
-        messages: [
+        contents: [
           {
-            role: 'system',
-            content: `You are a medical expert that analyzes prescriptions. Extract the following information in Arabic:
-              - Medication name (اسم الدواء)
-              - Dosage (الجرعة)
-              - Frequency of use (عدد مرات الاستخدام)
-              - Usage instructions (تعليمات الاستخدام)
-              - Potential side effects (الآثار الجانبية المحتملة)
-              - Contraindications (موانع الاستعمال)
-              Structure the response as a JSON object with these fields.`
-          },
-          {
-            role: 'user',
-            content: `Analyze this prescription data: ${imageData}`
+            role: "user",
+            parts: [
+              {
+                text: `أنت خبير طبي يقوم بتحليل الوصفات الطبية. قم بتحليل النص التالي واستخراج المعلومات التالية باللغة العربية:
+                - اسم الدواء
+                - الجرعة
+                - عدد مرات الاستخدام
+                - تعليمات الاستخدام
+                - الآثار الجانبية المحتملة
+                - موانع الاستعمال
+                قم بهيكلة الرد كـ JSON object يحتوي على هذه الحقول.
+                
+                النص: ${imageData}`
+              }
+            ]
           }
         ],
-        temperature: 0.5,
-        max_tokens: 400
+        generationConfig: {
+          temperature: 0.5,
+          maxOutputTokens: 800,
+        }
       }),
     })
 
-    console.log('Received OpenAI response with status:', response.status)
+    console.log('Received Gemini AI response with status:', response.status)
 
     if (!response.ok) {
       const errorData = await response.text()
-      console.error('OpenAI API error:', errorData)
+      console.error('Gemini AI API error:', errorData)
       
       // Handle rate limiting and quota errors
-      if (response.status === 429 || errorData.includes('insufficient_quota')) {
+      if (response.status === 429 || errorData.includes('RESOURCE_EXHAUSTED')) {
         return new Response(
           JSON.stringify({ 
             error: 'عذراً، النظام مشغول حالياً. يرجى المحاولة بعد دقائق قليلة.',
@@ -75,13 +78,14 @@ serve(async (req) => {
         )
       }
       
-      throw new Error(`OpenAI API error: ${errorData}`)
+      throw new Error(`Gemini AI API error: ${errorData}`)
     }
 
     const aiResult = await response.json()
     console.log('Parsed AI response:', aiResult)
 
-    const analysis = JSON.parse(aiResult.choices[0].message.content)
+    // Extract the response text from Gemini's response structure
+    const analysis = JSON.parse(aiResult.candidates[0].content.parts[0].text)
 
     // Update the prescription in the database with the AI analysis
     const supabase = createClient(
@@ -122,10 +126,10 @@ serve(async (req) => {
     let errorMessage = 'حدث خطأ أثناء تحليل الوصفة الطبية'
     let statusCode = 500
     
-    if (error.message.includes('OpenAI API key is not configured')) {
+    if (error.message.includes('Gemini AI API key is not configured')) {
       errorMessage = 'لم يتم تكوين مفتاح API للذكاء الاصطناعي'
       statusCode = 403
-    } else if (error.message.includes('insufficient_quota')) {
+    } else if (error.message.includes('RESOURCE_EXHAUSTED')) {
       errorMessage = 'عذراً، النظام مشغول حالياً. يرجى المحاولة بعد دقائق قليلة.'
       statusCode = 503
     }
