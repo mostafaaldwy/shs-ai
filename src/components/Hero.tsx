@@ -39,8 +39,8 @@ export const Hero = () => {
           </div>
           <div className="md:w-1/2 mt-10 md:mt-0 flex gap-4">
             <img
-              src="/lovable-uploads/3f9def01-0f14-414b-b058-4ae06becfa1c.png"
-              alt="Healthcare"
+              src="/lovable-uploads/e27159b5-1104-4135-9921-ea59b2db508e.png"
+              alt="Modern Pharmacy Interior"
               className="w-full h-auto rounded-lg shadow-xl"
             />
           </div>
