@@ -23,8 +23,6 @@ export const Hero = () => {
           <div className="md:w-1/2 space-y-6 text-right">
             <h1 className="text-4xl md:text-5xl font-bold text-gray-900">
               إفهم وصفتك الطبية بسهولة
-              <br />
-              <span className="text-primary">بسهولة وذكاء</span>
             </h1>
             <p className="text-lg text-gray-600 max-w-xl">
               نستخدم الذكاء الاصطناعي ليوفر لك معلومات عن دوائك بدقة، مستمدة من الموسوعة الدوائية الأولى عالميًا (Micromedex) وذلك لضمان الموثوقية في كل معلومة.
