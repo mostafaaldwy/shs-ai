@@ -8,6 +8,17 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
+async function retryWithDelay(fn: () => Promise<any>, retries = 3, delay = 1000): Promise<any> {
+  try {
+    return await fn();
+  } catch (error) {
+    if (retries === 0) throw error;
+    console.log(`Retrying... ${retries} attempts left`);
+    await new Promise(resolve => setTimeout(resolve, delay));
+    return retryWithDelay(fn, retries - 1, delay * 1.5);
+  }
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders })
@@ -17,51 +28,59 @@ serve(async (req) => {
     const { imageData, prescriptionId } = await req.json()
     console.log('Starting prescription analysis...')
 
-    // Initialize Gemini API for text analysis
     const geminiKey = Deno.env.get('GIMINAI-AI')
     if (!geminiKey) {
       throw new Error('Gemini API key is not configured')
     }
 
-    // Use Gemini to analyze the prescription text
-    const geminiResponse = await fetch('https://generativelanguage.googleapis.com/v1/models/gemini-pro:generateContent', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-goog-api-key': geminiKey,
-      },
-      body: JSON.stringify({
-        contents: [{
-          role: "user",
-          parts: [{
-            text: `قم بتحليل هذه الوصفة الطبية باللغة العربية واستخرج المعلومات التالية:
-            1. اسم الدواء باللغة العربية
-            2. الجرعة المطلوبة
-            3. عدد مرات الاستخدام
-            4. تعليمات الاستخدام
-            5. الآثار الجانبية الشائعة
-            6. موانع الاستخدام
-            7. ملاحظات مهمة للمريض
-            
-            النص: ${imageData || "لا يوجد نص"}
-            
-            قم بإرجاع المعلومات بتنسيق JSON مع هذه المفاتيح:
-            medication_name, dosage, frequency, instructions, side_effects, contraindications, medical_notes`
-          }]
-        }],
-        generationConfig: {
-          temperature: 0.1,
-          maxOutputTokens: 1000,
-        }
-      }),
-    })
+    console.log('Analyzing prescription with Gemini AI...')
+    
+    const analyzeWithGemini = async () => {
+      const response = await fetch('https://generativelanguage.googleapis.com/v1/models/gemini-pro:generateContent', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-goog-api-key': geminiKey,
+        },
+        body: JSON.stringify({
+          contents: [{
+            role: "user",
+            parts: [{
+              text: `قم بتحليل هذه الوصفة الطبية باللغة العربية واستخرج المعلومات التالية:
+              1. اسم الدواء باللغة العربية
+              2. الجرعة المطلوبة
+              3. عدد مرات الاستخدام
+              4. تعليمات الاستخدام
+              5. الآثار الجانبية الشائعة
+              6. موانع الاستخدام
+              7. ملاحظات مهمة للمريض
+              
+              النص: ${imageData || "لا يوجد نص"}
+              
+              قم بإرجاع المعلومات بتنسيق JSON مع هذه المفاتيح:
+              medication_name, dosage, frequency, instructions, side_effects, contraindications, medical_notes`
+            }]
+          }],
+          generationConfig: {
+            temperature: 0.1,
+            maxOutputTokens: 1000,
+          }
+        }),
+      });
 
-    if (!geminiResponse.ok) {
-      throw new Error(`Gemini AI API error: ${await geminiResponse.text()}`)
-    }
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Gemini AI API error: ${errorText}`);
+      }
 
-    const geminiResult = await geminiResponse.json()
-    const analysisText = geminiResult.candidates[0].content.parts[0].text
+      const result = await response.json();
+      return result;
+    };
+
+    const geminiResult = await retryWithDelay(analyzeWithGemini);
+    const analysisText = geminiResult.candidates[0].content.parts[0].text;
+    
+    console.log('Successfully received analysis from Gemini AI');
     
     // Parse the JSON response from Gemini
     const analysis = JSON.parse(analysisText)
@@ -108,7 +127,7 @@ serve(async (req) => {
     if (error.message.includes('Gemini API key is not configured')) {
       errorMessage = 'حدث خطأ في تحليل النص. يرجى المحاولة مرة أخرى'
       statusCode = 403
-    } else if (error.message.includes('RESOURCE_EXHAUSTED')) {
+    } else if (error.message.includes('UNAVAILABLE') || error.message.includes('RESOURCE_EXHAUSTED')) {
       errorMessage = 'عذراً، النظام مشغول حالياً. يرجى المحاولة بعد دقائق قليلة.'
       statusCode = 503
     }
