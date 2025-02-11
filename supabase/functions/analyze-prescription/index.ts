@@ -23,7 +23,7 @@ serve(async (req) => {
       throw new Error('Gemini API key is not configured')
     }
 
-    // Use Gemini to analyze the prescription text and identify the medication
+    // Use Gemini to analyze the prescription text
     const geminiResponse = await fetch('https://generativelanguage.googleapis.com/v1/models/gemini-pro:generateContent', {
       method: 'POST',
       headers: {
@@ -34,21 +34,24 @@ serve(async (req) => {
         contents: [{
           role: "user",
           parts: [{
-            text: `Extract medication information from this prescription in Arabic.
-            Focus on identifying:
-            1. The main medication name (in both Arabic and English if possible)
-            2. Dosage instructions
-            3. Frequency of use
+            text: `قم بتحليل هذه الوصفة الطبية باللغة العربية واستخرج المعلومات التالية:
+            1. اسم الدواء باللغة العربية
+            2. الجرعة المطلوبة
+            3. عدد مرات الاستخدام
+            4. تعليمات الاستخدام
+            5. الآثار الجانبية الشائعة
+            6. موانع الاستخدام
+            7. ملاحظات مهمة للمريض
             
-            Text: ${imageData || "لا يوجد نص"}
+            النص: ${imageData || "لا يوجد نص"}
             
-            Format the response as JSON with these keys:
-            medication_name_ar, medication_name_en, dosage, frequency`
+            قم بإرجاع المعلومات بتنسيق JSON مع هذه المفاتيح:
+            medication_name, dosage, frequency, instructions, side_effects, contraindications, medical_notes`
           }]
         }],
         generationConfig: {
           temperature: 0.1,
-          maxOutputTokens: 500,
+          maxOutputTokens: 1000,
         }
       }),
     })
@@ -58,40 +61,10 @@ serve(async (req) => {
     }
 
     const geminiResult = await geminiResponse.json()
-    const basicAnalysis = JSON.parse(geminiResult.candidates[0].content.parts[0].text)
-
-    // Fetch detailed medication information from Mayo Clinic's API
-    const mayoKey = Deno.env.get('MAYO_CLINIC_API_KEY')
-    if (!mayoKey) {
-      throw new Error('Mayo Clinic API key is not configured')
-    }
-
-    console.log('Fetching Mayo Clinic data for:', basicAnalysis.medication_name_en)
-
-    const mayoResponse = await fetch(`https://api.mayoclinic.org/drugs/v1/drugs/search?name=${encodeURIComponent(basicAnalysis.medication_name_en)}`, {
-      headers: {
-        'Authorization': `Bearer ${mayoKey}`,
-        'Content-Type': 'application/json',
-      }
-    })
-
-    if (!mayoResponse.ok) {
-      throw new Error(`Mayo Clinic API error: ${await mayoResponse.text()}`)
-    }
-
-    const mayoData = await mayoResponse.json()
+    const analysisText = geminiResult.candidates[0].content.parts[0].text
     
-    // Combine prescription analysis with Mayo Clinic data
-    const analysis = {
-      medication_name: basicAnalysis.medication_name_ar,
-      medication_name_en: basicAnalysis.medication_name_en,
-      dosage: basicAnalysis.dosage,
-      frequency: basicAnalysis.frequency,
-      instructions: mayoData.instructions || "لم يتم العثور على تعليمات محددة",
-      side_effects: mayoData.sideEffects || "لم يتم العثور على آثار جانبية محددة",
-      contraindications: mayoData.contraindications || "لم يتم العثور على موانع استعمال محددة",
-      medical_notes: mayoData.additionalInfo || "لم يتم العثور على ملاحظات إضافية"
-    }
+    // Parse the JSON response from Gemini
+    const analysis = JSON.parse(analysisText)
 
     // Update the prescription in the database
     const supabase = createClient(
@@ -132,8 +105,8 @@ serve(async (req) => {
     let errorMessage = 'حدث خطأ أثناء تحليل الوصفة الطبية'
     let statusCode = 500
     
-    if (error.message.includes('Mayo Clinic API key is not configured')) {
-      errorMessage = 'حدث خطأ في الوصول إلى قاعدة بيانات الأدوية. يرجى المحاولة مرة أخرى'
+    if (error.message.includes('Gemini API key is not configured')) {
+      errorMessage = 'حدث خطأ في تحليل النص. يرجى المحاولة مرة أخرى'
       statusCode = 403
     } else if (error.message.includes('RESOURCE_EXHAUSTED')) {
       errorMessage = 'عذراً، النظام مشغول حالياً. يرجى المحاولة بعد دقائق قليلة.'
