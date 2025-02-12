@@ -55,6 +55,9 @@ serve(async (req) => {
     console.log('Analyzing prescription with Gemini AI...')
     
     const analyzeWithGemini = async () => {
+      const prescriptionText = imageData || "No text available";
+      console.log('Prescription text:', prescriptionText);
+      
       const response = await fetch('https://generativelanguage.googleapis.com/v1/models/gemini-pro:generateContent', {
         method: 'POST',
         headers: {
@@ -65,19 +68,30 @@ serve(async (req) => {
           contents: [{
             role: "user",
             parts: [{
-              text: `قم بتحليل هذه الوصفة الطبية باللغة العربية واستخرج المعلومات التالية:
-              1. اسم الدواء باللغة العربية والإنجليزية
-              2. الجرعة المطلوبة
-              3. عدد مرات الاستخدام
-              4. تعليمات الاستخدام
-              5. الآثار الجانبية الشائعة
-              6. موانع الاستخدام
-              7. ملاحظات مهمة للمريض
-              
-              النص: ${imageData || "لا يوجد نص"}
-              
-              قم بإرجاع المعلومات بتنسيق JSON مع هذه المفاتيح:
-              medication_name_ar, medication_name_en, dosage, frequency, instructions, side_effects, contraindications, medical_notes`
+              text: `Analyze this medical prescription and extract the following information:
+
+              Required information:
+              1. Medication name in Arabic and English
+              2. Dosage
+              3. Frequency of use
+              4. Usage instructions
+              5. Common side effects
+              6. Contraindications
+              7. Important patient notes
+
+              Prescription text: "${prescriptionText}"
+
+              Return ONLY a valid JSON object with these exact keys:
+              {
+                "medication_name_ar": "Arabic name",
+                "medication_name_en": "English name",
+                "dosage": "dosage info",
+                "frequency": "frequency info",
+                "instructions": "usage instructions",
+                "side_effects": "side effects list",
+                "contraindications": "contraindications list",
+                "medical_notes": "additional notes"
+              }`
             }]
           }],
           generationConfig: {
@@ -97,10 +111,21 @@ serve(async (req) => {
     };
 
     const geminiResult = await retryWithDelay(analyzeWithGemini);
-    const analysisText = geminiResult.candidates[0].content.parts[0].text;
-    const aiAnalysis = JSON.parse(analysisText);
+    console.log('Raw Gemini response:', geminiResult);
     
-    console.log('Successfully received analysis from Gemini AI');
+    const analysisText = geminiResult.candidates[0].content.parts[0].text;
+    console.log('Analysis text:', analysisText);
+    
+    let aiAnalysis;
+    try {
+      aiAnalysis = JSON.parse(analysisText.trim());
+    } catch (parseError) {
+      console.error('JSON parse error:', parseError);
+      console.log('Failed to parse text:', analysisText);
+      throw new Error('Failed to parse AI response as JSON');
+    }
+    
+    console.log('Successfully parsed AI analysis:', aiAnalysis);
     
     // Fetch FDA data for additional safety information
     console.log('Fetching FDA data for:', aiAnalysis.medication_name_en);
@@ -170,6 +195,9 @@ serve(async (req) => {
     } else if (error.message.includes('UNAVAILABLE') || error.message.includes('RESOURCE_EXHAUSTED')) {
       errorMessage = 'عذراً، النظام مشغول حالياً. يرجى المحاولة بعد دقائق قليلة.'
       statusCode = 503
+    } else if (error.message.includes('Failed to parse AI response')) {
+      errorMessage = 'حدث خطأ في تحليل استجابة الذكاء الاصطناعي. يرجى المحاولة مرة أخرى.'
+      statusCode = 500
     }
 
     return new Response(
