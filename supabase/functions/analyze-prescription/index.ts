@@ -19,6 +19,25 @@ async function retryWithDelay(fn: () => Promise<any>, retries = 3, delay = 1000)
   }
 }
 
+async function getFDAData(drugName: string) {
+  try {
+    const response = await fetch(
+      `https://api.fda.gov/drug/event.json?search=patient.drug.medicinalproduct:${encodeURIComponent(drugName)}&limit=1`
+    );
+    
+    if (!response.ok) {
+      console.log('FDA API error:', await response.text());
+      return null;
+    }
+    
+    const data = await response.json();
+    return data.results?.[0];
+  } catch (error) {
+    console.error('Error fetching FDA data:', error);
+    return null;
+  }
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders })
@@ -47,7 +66,7 @@ serve(async (req) => {
             role: "user",
             parts: [{
               text: `قم بتحليل هذه الوصفة الطبية باللغة العربية واستخرج المعلومات التالية:
-              1. اسم الدواء باللغة العربية
+              1. اسم الدواء باللغة العربية والإنجليزية
               2. الجرعة المطلوبة
               3. عدد مرات الاستخدام
               4. تعليمات الاستخدام
@@ -58,7 +77,7 @@ serve(async (req) => {
               النص: ${imageData || "لا يوجد نص"}
               
               قم بإرجاع المعلومات بتنسيق JSON مع هذه المفاتيح:
-              medication_name, dosage, frequency, instructions, side_effects, contraindications, medical_notes`
+              medication_name_ar, medication_name_en, dosage, frequency, instructions, side_effects, contraindications, medical_notes`
             }]
           }],
           generationConfig: {
@@ -79,11 +98,32 @@ serve(async (req) => {
 
     const geminiResult = await retryWithDelay(analyzeWithGemini);
     const analysisText = geminiResult.candidates[0].content.parts[0].text;
+    const aiAnalysis = JSON.parse(analysisText);
     
     console.log('Successfully received analysis from Gemini AI');
     
-    // Parse the JSON response from Gemini
-    const analysis = JSON.parse(analysisText)
+    // Fetch FDA data for additional safety information
+    console.log('Fetching FDA data for:', aiAnalysis.medication_name_en);
+    const fdaData = await getFDAData(aiAnalysis.medication_name_en);
+    
+    // Combine AI analysis with FDA data
+    const analysis = {
+      medication_name: aiAnalysis.medication_name_ar,
+      dosage: aiAnalysis.dosage,
+      frequency: aiAnalysis.frequency,
+      instructions: aiAnalysis.instructions,
+      side_effects: aiAnalysis.side_effects,
+      contraindications: aiAnalysis.contraindications,
+      medical_notes: aiAnalysis.medical_notes
+    };
+
+    // Add FDA safety information if available
+    if (fdaData) {
+      const fdaSafetyInfo = fdaData.patient?.drug?.[0]?.drugindication || '';
+      const fdaReactions = fdaData.patient?.reaction?.map((r: any) => r.reactionmeddrapt).join(', ') || '';
+      
+      analysis.medical_notes = `${analysis.medical_notes}\n\nمعلومات إضافية من FDA:\nدواعي الاستعمال: ${fdaSafetyInfo}\nردود الفعل المحتملة: ${fdaReactions}`;
+    }
 
     // Update the prescription in the database
     const supabase = createClient(
