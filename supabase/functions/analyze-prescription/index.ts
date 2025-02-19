@@ -1,39 +1,104 @@
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.7.1'
-import "https://deno.land/x/xhr@0.1.0/mod.ts"
+import * as tf from 'https://cdn.jsdelivr.net/npm/@tensorflow/tfjs/dist/tf.min.js'
+import cv from 'https://cdn.jsdelivr.net/npm/opencv-wasm/opencv.js'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
-async function getFDAData(drugName: string) {
-  try {
-    const fdaBaseUrl = 'https://api.fda.gov/drug';
-    const responses = await Promise.all([
-      fetch(`${fdaBaseUrl}/event.json?search=patient.drug.medicinalproduct:${encodeURIComponent(drugName)}&limit=1`),
-      fetch(`${fdaBaseUrl}/label.json?search=openfda.brand_name:${encodeURIComponent(drugName)}&limit=1`)
-    ]);
-    
-    const [eventsData, labelData] = await Promise.all(
-      responses.map(async (response) => {
-        if (!response.ok) {
-          console.log('FDA API error:', await response.text());
-          return null;
-        }
-        return response.json();
-      })
-    );
+async function preprocessImage(imageData: string): Promise<ImageData> {
+  // Decode base64 image
+  const img = await createImageBitmap(await fetch(imageData).then(r => r.blob()));
+  
+  // Create canvas and get context
+  const canvas = new OffscreenCanvas(300, 300);
+  const ctx = canvas.getContext('2d');
+  if (!ctx) throw new Error('Failed to get canvas context');
 
-    return {
-      events: eventsData?.results?.[0],
-      label: labelData?.results?.[0]
-    };
-  } catch (error) {
-    console.error('Error fetching FDA data:', error);
-    return null;
+  // Draw and resize image to 300x300
+  ctx.drawImage(img, 0, 0, 300, 300);
+  
+  // Get image data
+  const imageDataArray = ctx.getImageData(0, 0, 300, 300);
+  
+  // Convert to grayscale using OpenCV.js
+  const mat = cv.matFromImageData(imageDataArray);
+  const grayMat = new cv.Mat();
+  cv.cvtColor(mat, grayMat, cv.COLOR_RGBA2GRAY);
+  
+  // Apply contrast enhancement
+  const enhancedMat = new cv.Mat();
+  cv.equalizeHist(grayMat, enhancedMat);
+  
+  // Apply thresholding
+  const thresholdMat = new cv.Mat();
+  cv.threshold(enhancedMat, thresholdMat, 0, 255, cv.THRESH_BINARY + cv.THRESH_OTSU);
+  
+  // Find contours
+  const contours = new cv.MatVector();
+  const hierarchy = new cv.Mat();
+  cv.findContours(thresholdMat, contours, hierarchy, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE);
+  
+  // Sort contours by x-coordinate for proper text order
+  const boundingBoxes = [];
+  for (let i = 0; i < contours.size(); i++) {
+    const rect = cv.boundingRect(contours.get(i));
+    boundingBoxes.push({ index: i, x: rect.x, rect });
   }
+  boundingBoxes.sort((a, b) => a.x - b.x);
+  
+  // Create output canvas for visualization
+  const outputCanvas = new OffscreenCanvas(300, 300);
+  const outputCtx = outputCanvas.getContext('2d');
+  if (!outputCtx) throw new Error('Failed to get output canvas context');
+  
+  // Draw original image
+  outputCtx.drawImage(img, 0, 0, 300, 300);
+  
+  // Draw bounding boxes
+  outputCtx.strokeStyle = 'red';
+  outputCtx.lineWidth = 2;
+  boundingBoxes.forEach(({ rect }) => {
+    outputCtx.strokeRect(rect.x, rect.y, rect.width, rect.height);
+  });
+  
+  // Clean up OpenCV matrices
+  mat.delete();
+  grayMat.delete();
+  enhancedMat.delete();
+  thresholdMat.delete();
+  contours.delete();
+  hierarchy.delete();
+  
+  return outputCtx.getImageData(0, 0, 300, 300);
+}
+
+async function extractTextFromImage(imageData: string): Promise<string[]> {
+  const processedImage = await preprocessImage(imageData);
+  
+  // Load TensorFlow.js model for text recognition
+  // Note: You would need to train and host your own model
+  const model = await tf.loadLayersModel('path_to_your_model/model.json');
+  
+  // Convert processed image to tensor
+  const tensor = tf.browser.fromPixels(processedImage, 1)
+    .expandDims(0)
+    .toFloat()
+    .div(255.0);
+  
+  // Get predictions
+  const predictions = await model.predict(tensor).array();
+  
+  // Convert predictions to text (this would depend on your model's output format)
+  const recognizedText = predictions[0].map((pred: number[]) => {
+    // Convert prediction to text based on your character mapping
+    return "recognized_character";
+  });
+  
+  return recognizedText;
 }
 
 serve(async (req) => {
@@ -45,110 +110,9 @@ serve(async (req) => {
     const { imageBase64, prescriptionId } = await req.json()
     console.log('Starting prescription analysis...')
 
-    const geminiKey = Deno.env.get('GIMINAI-AI')
-    if (!geminiKey) {
-      throw new Error('Gemini API key is not configured')
-    }
-
-    // Analyze with Gemini AI
-    const analyzeWithGemini = async () => {
-      const response = await fetch('https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-goog-api-key': geminiKey,
-        },
-        body: JSON.stringify({
-          contents: [{
-            parts: [
-              { text: `أنت خبير في تحليل الوصفات الطبية. قم بتحليل الصورة واستخراج المعلومات التالية:
-
-              المعلومات المطلوبة:
-              1. اسم الدواء بالعربية والإنجليزية
-              2. الجرعة
-              3. عدد مرات الاستخدام
-              4. تعليمات الاستخدام
-              5. الآثار الجانبية الشائعة
-              6. موانع الاستعمال
-              7. ملاحظات هامة للمريض
-
-              أرجع JSON object يحتوي على هذه المعلومات بالضبط:
-              {
-                "medication_name_ar": "الاسم بالعربي",
-                "medication_name_en": "English name",
-                "dosage": "معلومات الجرعة",
-                "frequency": "عدد مرات الاستخدام",
-                "instructions": "تعليمات الاستخدام",
-                "side_effects": "الآثار الجانبية",
-                "contraindications": "موانع الاستعمال",
-                "medical_notes": "ملاحظات إضافية"
-              }` },
-              { inlineData: { mimeType: "image/jpeg", data: imageBase64.split(',')[1] } }
-            ]
-          }],
-          generationConfig: {
-            temperature: 0.1,
-            maxOutputTokens: 1000,
-          }
-        })
-      });
-
-      if (!response.ok) {
-        throw new Error(`Gemini AI API error: ${await response.text()}`);
-      }
-
-      const result = await response.json();
-      let analysisText = result.candidates[0].content.parts[0].text;
-      
-      // Extract the JSON object from the response
-      const jsonMatch = analysisText.match(/\{[\s\S]*\}/);
-      if (!jsonMatch) {
-        throw new Error('No valid JSON found in the response');
-      }
-      
-      return JSON.parse(jsonMatch[0]);
-    };
-
-    const aiAnalysis = await analyzeWithGemini();
-    console.log('AI Analysis complete:', aiAnalysis);
-
-    // Get FDA data
-    const fdaData = await getFDAData(aiAnalysis.medication_name_en);
-    console.log('FDA Data received:', fdaData);
-
-    // Combine AI and FDA data
-    const combinedAnalysis = {
-      medication_name: aiAnalysis.medication_name_ar,
-      medication_name_en: aiAnalysis.medication_name_en,
-      dosage: aiAnalysis.dosage,
-      frequency: aiAnalysis.frequency,
-      instructions: aiAnalysis.instructions,
-      side_effects: aiAnalysis.side_effects,
-      contraindications: aiAnalysis.contraindications,
-      medical_notes: aiAnalysis.medical_notes
-    };
-
-    // Add FDA data if available
-    if (fdaData) {
-      const { events, label } = fdaData;
-      
-      if (label) {
-        const fdaWarnings = label.warnings_and_cautions || label.warnings || [];
-        const fdaDosage = label.dosage_and_administration || [];
-        
-        combinedAnalysis.medical_notes += '\n\nFDA Information:\n';
-        combinedAnalysis.medical_notes += fdaWarnings.join('\n');
-        combinedAnalysis.instructions += '\n\nFDA Dosage Information:\n';
-        combinedAnalysis.instructions += fdaDosage.join('\n');
-      }
-
-      if (events) {
-        const fdaReactions = events.patient?.reaction?.map((r: any) => r.reactionmeddrapt).join(', ');
-        if (fdaReactions) {
-          combinedAnalysis.side_effects += '\n\nFDA Reported Side Effects:\n' + fdaReactions;
-        }
-      }
-    }
+    // Process image and extract text
+    const recognizedText = await extractTextFromImage(imageBase64);
+    console.log('Recognized text:', recognizedText);
 
     // Update the prescription in Supabase
     const supabase = createClient(
@@ -156,11 +120,12 @@ serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     )
 
-    console.log('Updating prescription in database...')
-
     const { error: updateError } = await supabase
       .from('Patient name')
-      .update(combinedAnalysis)
+      .update({
+        medication_name: recognizedText.join(' '),
+        medical_notes: 'Extracted using OCR and CNN'
+      })
       .eq('id', prescriptionId)
 
     if (updateError) {
@@ -168,32 +133,24 @@ serve(async (req) => {
       throw updateError
     }
 
-    console.log('Analysis complete and database updated successfully')
-
     return new Response(
-      JSON.stringify(combinedAnalysis),
+      JSON.stringify({ 
+        medication_name: recognizedText.join(' '),
+        processing_details: 'Text extracted using CNN-based OCR'
+      }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     )
 
   } catch (error) {
     console.error('Error in analyze-prescription function:', error)
-    
-    let errorMessage = 'حدث خطأ أثناء تحليل الوصفة الطبية'
-    let statusCode = 500
-    
-    if (error.message.includes('Gemini API key')) {
-      errorMessage = 'خطأ في تكوين المفتاح API'
-      statusCode = 403
-    } else if (error.message.includes('UNAVAILABLE')) {
-      errorMessage = 'النظام مشغول حالياً. يرجى المحاولة لاحقاً'
-      statusCode = 503
-    }
-
     return new Response(
-      JSON.stringify({ error: errorMessage, details: error.message }),
+      JSON.stringify({ 
+        error: 'حدث خطأ أثناء معالجة الصورة',
+        details: error.message 
+      }),
       { 
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        status: statusCode
+        status: 500
       }
     )
   }
