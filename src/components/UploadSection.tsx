@@ -100,15 +100,12 @@ export const UploadSection = () => {
 
       setProgress(40);
       setStatusMessage("جاري تحليل الوصفة...");
-
-      // Remove the data URL prefix before sending
-      const base64Image = imageData.split(',')[1];
       
       // Call edge function to analyze the image
       const { data: analysisData, error: analysisError } = await supabase.functions
         .invoke('analyze-prescription', {
           body: { 
-            imageBase64: base64Image,
+            imageBase64: imageData,
             prescriptionId: prescriptionData.id
           }
         });
