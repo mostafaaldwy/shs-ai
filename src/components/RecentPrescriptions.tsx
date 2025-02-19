@@ -9,8 +9,7 @@ import { FileText } from "lucide-react";
 interface Prescription {
   id: number;
   created_at: string;
-  medication_name: string;
-  Medical_prescription: string | null;
+  medication_name: string | null;
 }
 
 export const RecentPrescriptions = () => {
@@ -29,7 +28,7 @@ export const RecentPrescriptions = () => {
 
         const { data, error } = await supabase
           .from("Patient name")
-          .select("id, created_at, medication_name, Medical_prescription")
+          .select("id, created_at, medication_name")
           .order("created_at", { ascending: false })
           .limit(3);
 
