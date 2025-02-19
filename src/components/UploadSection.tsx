@@ -7,6 +7,9 @@ import { useToast } from "@/hooks/use-toast";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Progress } from "@/components/ui/progress";
+import { CameraCapture } from "./CameraCapture";
+import { ImageCropper } from "./ImageCropper";
+import { ImageConfirmation } from "./ImageConfirmation";
 
 export const UploadSection = () => {
   const { toast } = useToast();
@@ -14,6 +17,52 @@ export const UploadSection = () => {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [progress, setProgress] = useState(0);
   const [statusMessage, setStatusMessage] = useState("");
+  
+  // New state for managing dialogs
+  const [isCameraOpen, setIsCameraOpen] = useState(false);
+  const [isCropperOpen, setIsCropperOpen] = useState(false);
+  const [isConfirmationOpen, setIsConfirmationOpen] = useState(false);
+  const [selectedImage, setSelectedImage] = useState<string>("");
+  const [croppedImage, setCroppedImage] = useState<string>("");
+
+  const handleCameraCapture = (imageUrl: string) => {
+    setSelectedImage(imageUrl);
+    setIsCropperOpen(true);
+  };
+
+  const handleFilePick = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      if (!file.type.startsWith('image/')) {
+        toast({
+          variant: "destructive",
+          title: "نوع الملف غير مدعوم",
+          description: "يرجى تحميل صورة فقط",
+        });
+        return;
+      }
+
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        if (event.target?.result) {
+          setSelectedImage(event.target.result as string);
+          setIsCropperOpen(true);
+        }
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const handleCropComplete = (croppedImageUrl: string) => {
+    setCroppedImage(croppedImageUrl);
+    setIsConfirmationOpen(true);
+  };
+
+  const handleRetry = () => {
+    setSelectedImage("");
+    setCroppedImage("");
+    setIsConfirmationOpen(false);
+  };
 
   const analyzePrescription = async (imageData: string) => {
     const { data: { user } } = await supabase.auth.getUser();
@@ -94,26 +143,9 @@ export const UploadSection = () => {
     }
   };
 
-  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      if (!file.type.startsWith('image/')) {
-        toast({
-          variant: "destructive",
-          title: "نوع الملف غير مدعوم",
-          description: "يرجى تحميل صورة فقط",
-        });
-        return;
-      }
-
-      const reader = new FileReader();
-      reader.onload = async (event) => {
-        if (event.target?.result) {
-          await analyzePrescription(event.target.result as string);
-        }
-      };
-      reader.readAsDataURL(file);
-    }
+  const handleConfirm = () => {
+    setIsConfirmationOpen(false);
+    analyzePrescription(croppedImage);
   };
 
   return (
@@ -138,20 +170,11 @@ export const UploadSection = () => {
             <Button
               variant="outline"
               className="h-32 flex flex-col items-center justify-center space-y-2 border-2 border-dashed hover:border-primary hover:bg-primary/5"
-              onClick={() => document.getElementById("camera-input")?.click()}
+              onClick={() => setIsCameraOpen(true)}
               disabled={isAnalyzing}
             >
               <Camera className="h-8 w-8 text-primary" />
               <span>التقاط صورة</span>
-              <input
-                id="camera-input"
-                type="file"
-                accept="image/*"
-                capture="environment"
-                className="hidden"
-                onChange={handleFileUpload}
-                disabled={isAnalyzing}
-              />
             </Button>
 
             <Button
@@ -167,7 +190,7 @@ export const UploadSection = () => {
                 type="file"
                 accept="image/*"
                 className="hidden"
-                onChange={handleFileUpload}
+                onChange={handleFilePick}
                 disabled={isAnalyzing}
               />
             </Button>
@@ -185,13 +208,34 @@ export const UploadSection = () => {
                 type="file"
                 accept=".pdf,image/*"
                 className="hidden"
-                onChange={handleFileUpload}
+                onChange={handleFilePick}
                 disabled={isAnalyzing}
               />
             </Button>
           </div>
         </div>
       </Card>
+
+      <CameraCapture
+        isOpen={isCameraOpen}
+        onClose={() => setIsCameraOpen(false)}
+        onCapture={handleCameraCapture}
+      />
+
+      <ImageCropper
+        isOpen={isCropperOpen}
+        onClose={() => setIsCropperOpen(false)}
+        imageUrl={selectedImage}
+        onCropComplete={handleCropComplete}
+      />
+
+      <ImageConfirmation
+        isOpen={isConfirmationOpen}
+        onClose={() => setIsConfirmationOpen(false)}
+        imageUrl={croppedImage}
+        onConfirm={handleConfirm}
+        onRetry={handleRetry}
+      />
     </div>
   );
 };
