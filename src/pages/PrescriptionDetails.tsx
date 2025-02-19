@@ -2,7 +2,7 @@
 import { useLocation } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Navigation } from "@/components/Navigation";
-import { FileText } from "lucide-react";
+import { FileText, AlertTriangle } from "lucide-react";
 import {
   Sheet,
   SheetContent,
@@ -11,123 +11,143 @@ import {
   SheetTrigger,
 } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { cn } from "@/lib/utils";
 
 const PrescriptionDetails = () => {
   const location = useLocation();
   const { detectedText, analysis } = location.state?.prescriptionData || {};
 
+  // FDA warning component
+  const WarningAlert = ({ title, description }: { title: string; description: string }) => (
+    <Alert variant="destructive" className="mb-4">
+      <AlertTriangle className="h-4 w-4" />
+      <AlertTitle>{title}</AlertTitle>
+      <AlertDescription>{description}</AlertDescription>
+    </Alert>
+  );
+
+  // Information section component
+  const InfoSection = ({ title, content, className = "" }: { title: string; content: string | undefined; className?: string }) => (
+    <div className={cn("space-y-2", className)}>
+      <h3 className="font-semibold text-lg">{title}</h3>
+      <p className="text-gray-700 leading-relaxed">
+        {content || "غير متوفر"}
+      </p>
+    </div>
+  );
+
+  const hasWarnings = analysis?.contraindications || analysis?.side_effects;
+
   return (
     <div className="min-h-screen bg-background font-cairo p-6" dir="rtl">
-      <div className="max-w-4xl mx-auto">
+      <div className="max-w-4xl mx-auto space-y-6">
         <h1 className="text-3xl font-bold mb-6 text-center">تفاصيل الوصفة الطبية</h1>
         
+        {/* Quick View Sheet */}
         <Sheet>
           <SheetTrigger asChild>
-            <Button className="mb-6 w-full flex items-center justify-center gap-2">
+            <Button className="w-full flex items-center justify-center gap-2">
               <FileText className="h-5 w-5" />
-              اقرأ الوصفة
+              عرض سريع للوصفة
             </Button>
           </SheetTrigger>
           <SheetContent side="right" className="w-full sm:max-w-2xl overflow-y-auto">
             <SheetHeader>
-              <SheetTitle>نتائج تحليل الوصفة الطبية</SheetTitle>
+              <SheetTitle>ملخص الوصفة الطبية</SheetTitle>
             </SheetHeader>
             <div className="mt-6 space-y-6">
-              <div>
-                <h3 className="font-semibold text-lg mb-2">النص المكتشف</h3>
-                <p className="text-gray-700">{detectedText || "لم يتم اكتشاف نص"}</p>
-              </div>
-
-              <div className="space-y-4">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <h3 className="font-semibold text-lg mb-2">اسم الدواء</h3>
-                    <p className="text-gray-700">{analysis?.medication_name || "غير متوفر"}</p>
-                  </div>
-                  <div>
-                    <h3 className="font-semibold text-lg mb-2">الجرعة</h3>
-                    <p className="text-gray-700">{analysis?.dosage || "غير متوفر"}</p>
-                  </div>
-                  <div>
-                    <h3 className="font-semibold text-lg mb-2">عدد مرات الاستخدام</h3>
-                    <p className="text-gray-700">{analysis?.frequency || "غير متوفر"}</p>
-                  </div>
-                  <div>
-                    <h3 className="font-semibold text-lg mb-2">تعليمات الاستخدام</h3>
-                    <p className="text-gray-700">{analysis?.instructions || "غير متوفر"}</p>
-                  </div>
+              <InfoSection title="النص المكتشف" content={detectedText} />
+              {analysis && (
+                <div className="space-y-4">
+                  <InfoSection title="اسم الدواء" content={analysis.medication_name} />
+                  <InfoSection title="الجرعة" content={analysis.dosage} />
+                  <InfoSection title="التعليمات" content={analysis.instructions} />
                 </div>
-
-                <div className="border-t pt-4">
-                  <h3 className="font-semibold text-lg mb-2">الآثار الجانبية المحتملة</h3>
-                  <p className="text-gray-700">{analysis?.side_effects || "غير متوفر"}</p>
-                </div>
-
-                <div className="border-t pt-4">
-                  <h3 className="font-semibold text-lg mb-2">موانع الاستعمال</h3>
-                  <p className="text-gray-700">{analysis?.contraindications || "غير متوفر"}</p>
-                </div>
-
-                {analysis?.medical_notes && (
-                  <div className="border-t pt-4">
-                    <h3 className="font-semibold text-lg mb-2">ملاحظات طبية إضافية</h3>
-                    <p className="text-gray-700">{analysis.medical_notes}</p>
-                  </div>
-                )}
-              </div>
+              )}
             </div>
           </SheetContent>
         </Sheet>
 
+        {/* Main Content */}
         <Card className="mb-6">
           <CardHeader>
-            <CardTitle>النص المكتشف</CardTitle>
+            <CardTitle>نتيجة تحليل النص</CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-lg">{detectedText || "لم يتم اكتشاف نص"}</p>
+            <p className="text-lg mb-4">{detectedText || "لم يتم اكتشاف نص"}</p>
           </CardContent>
         </Card>
 
-        <Card className="mb-6">
+        {/* Medication Details */}
+        <Card>
           <CardHeader>
-            <CardTitle>تحليل الوصفة الطبية</CardTitle>
+            <CardTitle>معلومات الدواء</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <h3 className="font-semibold text-lg mb-2">اسم الدواء</h3>
-                  <p className="text-gray-700">{analysis?.medication_name || "غير متوفر"}</p>
-                </div>
-                <div>
-                  <h3 className="font-semibold text-lg mb-2">الجرعة</h3>
-                  <p className="text-gray-700">{analysis?.dosage || "غير متوفر"}</p>
-                </div>
-                <div>
-                  <h3 className="font-semibold text-lg mb-2">عدد مرات الاستخدام</h3>
-                  <p className="text-gray-700">{analysis?.frequency || "غير متوفر"}</p>
-                </div>
-                <div>
-                  <h3 className="font-semibold text-lg mb-2">تعليمات الاستخدام</h3>
-                  <p className="text-gray-700">{analysis?.instructions || "غير متوفر"}</p>
-                </div>
+            {hasWarnings && (
+              <div className="mb-6">
+                {analysis?.contraindications && (
+                  <WarningAlert 
+                    title="تنبيه: موانع الاستعمال"
+                    description={analysis.contraindications}
+                  />
+                )}
+                {analysis?.side_effects && (
+                  <WarningAlert 
+                    title="تنبيه: الآثار الجانبية المحتملة"
+                    description={analysis.side_effects}
+                  />
+                )}
               </div>
+            )}
 
-              <div className="border-t pt-4">
-                <h3 className="font-semibold text-lg mb-2">الآثار الجانبية المحتملة</h3>
-                <p className="text-gray-700">{analysis?.side_effects || "غير متوفر"}</p>
-              </div>
+            <div className="grid grid-cols-1 gap-6">
+              <InfoSection 
+                title="اسم الدواء" 
+                content={analysis?.medication_name}
+                className="border-b pb-4" 
+              />
+              
+              <InfoSection 
+                title="الجرعة المقررة" 
+                content={analysis?.dosage}
+                className="border-b pb-4" 
+              />
+              
+              <InfoSection 
+                title="عدد مرات الاستخدام" 
+                content={analysis?.frequency}
+                className="border-b pb-4" 
+              />
+              
+              <InfoSection 
+                title="تعليمات الاستخدام" 
+                content={analysis?.instructions}
+                className="border-b pb-4" 
+              />
 
-              <div className="border-t pt-4">
-                <h3 className="font-semibold text-lg mb-2">موانع الاستعمال</h3>
-                <p className="text-gray-700">{analysis?.contraindications || "غير متوفر"}</p>
-              </div>
+              {analysis?.fdaData && (
+                <>
+                  <InfoSection 
+                    title="معلومات FDA الإضافية" 
+                    content={analysis.fdaData.label}
+                    className="border-b pb-4" 
+                  />
+                  
+                  <InfoSection 
+                    title="تقارير الآثار الجانبية (FDA)" 
+                    content={analysis.fdaData.events}
+                    className="border-b pb-4" 
+                  />
+                </>
+              )}
 
               {analysis?.medical_notes && (
-                <div className="border-t pt-4">
-                  <h3 className="font-semibold text-lg mb-2">ملاحظات طبية إضافية</h3>
-                  <p className="text-gray-700">{analysis.medical_notes}</p>
-                </div>
+                <InfoSection 
+                  title="ملاحظات طبية إضافية" 
+                  content={analysis.medical_notes} 
+                />
               )}
             </div>
           </CardContent>
