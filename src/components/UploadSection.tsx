@@ -4,14 +4,9 @@ import { Card } from "@/components/ui/card";
 import { Upload, Camera, FileText } from "lucide-react";
 import { useState } from "react";
 import { useToast } from "@/hooks/use-toast";
-import { pipeline } from "@huggingface/transformers";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Progress } from "@/components/ui/progress";
-
-type ImageToTextResult = {
-  generated_text: string;
-};
 
 export const UploadSection = () => {
   const { toast } = useToast();
@@ -38,77 +33,59 @@ export const UploadSection = () => {
     setStatusMessage("جاري تحميل الصورة...");
     
     try {
-      // Show initial progress for OCR
-      setProgress(30);
-      setStatusMessage("جاري تحليل النص من الصورة...");
+      // Save prescription to Supabase first
+      setProgress(20);
+      setStatusMessage("جاري حفظ الصورة...");
       
-      const textDetectionModel = await pipeline(
-        "image-to-text",
-        "Xenova/vit-gpt2-image-captioning"
-      );
+      const { data: prescriptionData, error } = await supabase
+        .from("Patient name")
+        .insert({
+          "Medical prescription": "جاري التحليل...",
+          describe: "تحليل الوصفة الطبية",
+          user_id: user.id
+        })
+        .select()
+        .single();
 
-      setProgress(50);
-      setStatusMessage("تم اكتشاف النص، جاري التحليل...");
+      if (error) throw error;
+
+      setProgress(40);
+      setStatusMessage("جاري تحليل الوصفة...");
       
-      const result = await textDetectionModel(imageData);
-      
-      if (result && Array.isArray(result) && result.length > 0) {
-        const output = result[0] as ImageToTextResult;
-        const detectedText = output.generated_text;
-        
-        setProgress(70);
-        setStatusMessage("جاري حفظ المعلومات...");
-        
-        // Save to Supabase
-        const { data: prescriptionData, error } = await supabase
-          .from("Patient name")
-          .insert({
-            "Medical prescription": detectedText,
-            describe: "تحليل الوصفة الطبية",
-            user_id: user.id
-          })
-          .select()
-          .single();
-
-        if (error) throw error;
-
-        setProgress(85);
-        setStatusMessage("جاري تحليل الوصفة الطبية...");
-        
-        // Analyze the prescription with AI
-        const { data: analysisData, error: analysisError } = await supabase.functions
-          .invoke('analyze-prescription', {
-            body: { 
-              imageData: detectedText,
-              prescriptionId: prescriptionData.id
-            }
-          });
-
-        if (analysisError) throw analysisError;
-
-        setProgress(100);
-        setStatusMessage("اكتمل التحليل!");
-        
-        toast({
-          title: "تم تحليل الوصفة الطبية بنجاح",
-          description: "تم استخراج المعلومات الطبية",
-        });
-
-        navigate("/prescription-details", {
-          state: {
-            prescriptionData: {
-              detectedText,
-              analysis: analysisData
-            }
+      // Call edge function to analyze the image
+      const { data: analysisData, error: analysisError } = await supabase.functions
+        .invoke('analyze-prescription', {
+          body: { 
+            imageBase64: imageData,
+            prescriptionId: prescriptionData.id
           }
         });
-      }
+
+      if (analysisError) throw analysisError;
+
+      setProgress(100);
+      setStatusMessage("اكتمل التحليل!");
+      
+      toast({
+        title: "تم تحليل الوصفة الطبية بنجاح",
+        description: "تم استخراج المعلومات الطبية",
+      });
+
+      navigate("/prescription-details", {
+        state: {
+          prescriptionId: prescriptionData.id,
+          prescriptionData: {
+            detectedText: analysisData.medication_name,
+            analysis: analysisData
+          }
+        }
+      });
     } catch (error) {
       console.error("Error analyzing prescription:", error);
       toast({
         variant: "destructive",
         title: "حدث خطأ",
-        description: "لم نتمكن من تحليل الوصفة الطبية. يرجى المحاولة مرة أخرى.",
+        description: error.message || "لم نتمكن من تحليل الوصفة الطبية. يرجى المحاولة مرة أخرى.",
       });
     } finally {
       setIsAnalyzing(false);

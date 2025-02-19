@@ -42,7 +42,7 @@ serve(async (req) => {
   }
 
   try {
-    const { imageData, prescriptionId } = await req.json()
+    const { imageBase64, prescriptionId } = await req.json()
     console.log('Starting prescription analysis...')
 
     const geminiKey = Deno.env.get('GIMINAI-AI')
@@ -52,7 +52,7 @@ serve(async (req) => {
 
     // Analyze with Gemini AI
     const analyzeWithGemini = async () => {
-      const response = await fetch('https://generativelanguage.googleapis.com/v1/models/gemini-pro:generateContent', {
+      const response = await fetch('https://generativelanguage.googleapis.com/v1/models/gemini-pro-vision:generateContent', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -60,33 +60,31 @@ serve(async (req) => {
         },
         body: JSON.stringify({
           contents: [{
-            role: "user",
-            parts: [{
-              text: `Analyze this medical prescription and extract the following information:
+            parts: [
+              { text: `أنت خبير في تحليل الوصفات الطبية. قم بتحليل الصورة واستخراج المعلومات التالية:
 
-              Required information:
-              1. Medication name in Arabic and English
-              2. Dosage
-              3. Frequency of use
-              4. Usage instructions
-              5. Common side effects
-              6. Contraindications
-              7. Important patient notes
+              المعلومات المطلوبة:
+              1. اسم الدواء بالعربية والإنجليزية
+              2. الجرعة
+              3. عدد مرات الاستخدام
+              4. تعليمات الاستخدام
+              5. الآثار الجانبية الشائعة
+              6. موانع الاستعمال
+              7. ملاحظات هامة للمريض
 
-              Prescription text: "${imageData}"
-
-              Return ONLY a valid JSON object with these exact keys:
+              أرجع JSON object يحتوي على هذه المعلومات بالضبط:
               {
-                "medication_name_ar": "Arabic name",
+                "medication_name_ar": "الاسم بالعربي",
                 "medication_name_en": "English name",
-                "dosage": "dosage info",
-                "frequency": "frequency info",
-                "instructions": "usage instructions",
-                "side_effects": "side effects list",
-                "contraindications": "contraindications list",
-                "medical_notes": "additional notes"
-              }`
-            }]
+                "dosage": "معلومات الجرعة",
+                "frequency": "عدد مرات الاستخدام",
+                "instructions": "تعليمات الاستخدام",
+                "side_effects": "الآثار الجانبية",
+                "contraindications": "موانع الاستعمال",
+                "medical_notes": "ملاحظات إضافية"
+              }` },
+              { inlineData: { mimeType: "image/jpeg", data: imageBase64.split(',')[1] } }
+            ]
           }],
           generationConfig: {
             temperature: 0.1,
@@ -101,7 +99,14 @@ serve(async (req) => {
 
       const result = await response.json();
       let analysisText = result.candidates[0].content.parts[0].text;
-      return JSON.parse(analysisText.trim());
+      
+      // Extract the JSON object from the response
+      const jsonMatch = analysisText.match(/\{[\s\S]*\}/);
+      if (!jsonMatch) {
+        throw new Error('No valid JSON found in the response');
+      }
+      
+      return JSON.parse(jsonMatch[0]);
     };
 
     const aiAnalysis = await analyzeWithGemini();
