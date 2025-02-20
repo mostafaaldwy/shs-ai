@@ -1,104 +1,27 @@
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.7.1'
-import * as tf from 'https://cdn.jsdelivr.net/npm/@tensorflow/tfjs/dist/tf.min.js'
-import cv from 'https://cdn.jsdelivr.net/npm/opencv-wasm/opencv.js'
+import { HfInference } from 'https://esm.sh/@huggingface/inference@2.3.2'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
-async function preprocessImage(imageData: string): Promise<ImageData> {
-  // Decode base64 image
-  const img = await createImageBitmap(await fetch(imageData).then(r => r.blob()));
-  
-  // Create canvas and get context
-  const canvas = new OffscreenCanvas(300, 300);
-  const ctx = canvas.getContext('2d');
-  if (!ctx) throw new Error('Failed to get canvas context');
-
-  // Draw and resize image to 300x300
-  ctx.drawImage(img, 0, 0, 300, 300);
-  
-  // Get image data
-  const imageDataArray = ctx.getImageData(0, 0, 300, 300);
-  
-  // Convert to grayscale using OpenCV.js
-  const mat = cv.matFromImageData(imageDataArray);
-  const grayMat = new cv.Mat();
-  cv.cvtColor(mat, grayMat, cv.COLOR_RGBA2GRAY);
-  
-  // Apply contrast enhancement
-  const enhancedMat = new cv.Mat();
-  cv.equalizeHist(grayMat, enhancedMat);
-  
-  // Apply thresholding
-  const thresholdMat = new cv.Mat();
-  cv.threshold(enhancedMat, thresholdMat, 0, 255, cv.THRESH_BINARY + cv.THRESH_OTSU);
-  
-  // Find contours
-  const contours = new cv.MatVector();
-  const hierarchy = new cv.Mat();
-  cv.findContours(thresholdMat, contours, hierarchy, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE);
-  
-  // Sort contours by x-coordinate for proper text order
-  const boundingBoxes = [];
-  for (let i = 0; i < contours.size(); i++) {
-    const rect = cv.boundingRect(contours.get(i));
-    boundingBoxes.push({ index: i, x: rect.x, rect });
-  }
-  boundingBoxes.sort((a, b) => a.x - b.x);
-  
-  // Create output canvas for visualization
-  const outputCanvas = new OffscreenCanvas(300, 300);
-  const outputCtx = outputCanvas.getContext('2d');
-  if (!outputCtx) throw new Error('Failed to get output canvas context');
-  
-  // Draw original image
-  outputCtx.drawImage(img, 0, 0, 300, 300);
-  
-  // Draw bounding boxes
-  outputCtx.strokeStyle = 'red';
-  outputCtx.lineWidth = 2;
-  boundingBoxes.forEach(({ rect }) => {
-    outputCtx.strokeRect(rect.x, rect.y, rect.width, rect.height);
-  });
-  
-  // Clean up OpenCV matrices
-  mat.delete();
-  grayMat.delete();
-  enhancedMat.delete();
-  thresholdMat.delete();
-  contours.delete();
-  hierarchy.delete();
-  
-  return outputCtx.getImageData(0, 0, 300, 300);
+interface PrescriptionAnalysisRequest {
+  imageBase64: string;
+  prescriptionId: number;
 }
 
-async function extractTextFromImage(imageData: string): Promise<string[]> {
-  const processedImage = await preprocessImage(imageData);
-  
-  // Load TensorFlow.js model for text recognition
-  // Note: You would need to train and host your own model
-  const model = await tf.loadLayersModel('path_to_your_model/model.json');
-  
-  // Convert processed image to tensor
-  const tensor = tf.browser.fromPixels(processedImage, 1)
-    .expandDims(0)
-    .toFloat()
-    .div(255.0);
-  
-  // Get predictions
-  const predictions = await model.predict(tensor).array();
-  
-  // Convert predictions to text (this would depend on your model's output format)
-  const recognizedText = predictions[0].map((pred: number[]) => {
-    // Convert prediction to text based on your character mapping
-    return "recognized_character";
-  });
-  
-  return recognizedText;
+interface OpenFDAResponse {
+  results: Array<{
+    indications_and_usage: string[];
+    dosage_and_administration: string[];
+    warnings: string[];
+    adverse_reactions: string[];
+    contraindications: string[];
+    description: string[];
+  }>;
 }
 
 serve(async (req) => {
@@ -107,51 +30,188 @@ serve(async (req) => {
   }
 
   try {
-    const { imageBase64, prescriptionId } = await req.json()
-    console.log('Starting prescription analysis...')
+    const { imageBase64, prescriptionId } = await req.json() as PrescriptionAnalysisRequest;
 
-    // Process image and extract text
-    const recognizedText = await extractTextFromImage(imageBase64);
-    console.log('Recognized text:', recognizedText);
-
-    // Update the prescription in Supabase
-    const supabase = createClient(
+    // Initialize Supabase client
+    const supabaseClient = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
-    )
+    );
 
-    const { error: updateError } = await supabase
-      .from('Patient name')
+    // Initialize HuggingFace for OCR
+    const hf = new HfInference(Deno.env.get('HUGGING_FACE_ACCESS_TOKEN'));
+
+    console.log('Starting prescription analysis...');
+
+    // Step 1: Extract text from image using Hugging Face OCR
+    console.log('Performing OCR...');
+    const extractedText = await performOCR(hf, imageBase64);
+
+    // Step 2: Extract medication information using Gemini AI
+    console.log('Analyzing text with Gemini AI...');
+    const medicationInfo = await analyzeMedicationInfo(extractedText);
+
+    // Step 3: Get FDA data
+    console.log('Fetching FDA data...');
+    let fdaData = null;
+    if (medicationInfo.medication_name) {
+      fdaData = await fetchFDAData(medicationInfo.medication_name);
+    }
+
+    // Step 4: Update prescription in database
+    console.log('Updating prescription record...');
+    const { error: updateError } = await supabaseClient
+      .from('prescriptions')
       .update({
-        medication_name: recognizedText.join(' '),
-        medical_notes: 'Extracted using OCR and CNN'
+        extracted_text: extractedText,
+        medication_name: medicationInfo.medication_name,
+        dosage: medicationInfo.dosage,
+        frequency: medicationInfo.frequency,
+        instructions: medicationInfo.instructions,
+        side_effects: fdaData?.adverse_reactions?.join('\n'),
+        contraindications: fdaData?.contraindications?.join('\n')
       })
-      .eq('id', prescriptionId)
+      .eq('id', prescriptionId);
 
-    if (updateError) {
-      console.error('Database update error:', updateError)
-      throw updateError
+    if (updateError) throw updateError;
+
+    // Step 5: Cache FDA data if not exists
+    if (fdaData && medicationInfo.medication_name) {
+      console.log('Caching FDA data...');
+      const { error: drugError } = await supabaseClient
+        .from('drugs')
+        .upsert({
+          name: medicationInfo.medication_name,
+          description: fdaData.description?.join('\n'),
+          dosage: fdaData.dosage_and_administration?.join('\n'),
+          side_effects: fdaData.adverse_reactions?.join('\n'),
+          contraindications: fdaData.contraindications?.join('\n'),
+          fda_data: fdaData,
+          updated_at: new Date().toISOString()
+        }, {
+          onConflict: 'name'
+        });
+
+      if (drugError) console.error('Error caching FDA data:', drugError);
     }
 
     return new Response(
-      JSON.stringify({ 
-        medication_name: recognizedText.join(' '),
-        processing_details: 'Text extracted using CNN-based OCR'
+      JSON.stringify({
+        success: true,
+        medication_name: medicationInfo.medication_name,
+        dosage: medicationInfo.dosage,
+        frequency: medicationInfo.frequency,
+        instructions: medicationInfo.instructions,
+        side_effects: fdaData?.adverse_reactions?.join('\n'),
+        contraindications: fdaData?.contraindications?.join('\n'),
+        fdaData: {
+          label: fdaData?.description?.join('\n'),
+          events: fdaData?.adverse_reactions?.join('\n')
+        }
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    )
+    );
 
   } catch (error) {
-    console.error('Error in analyze-prescription function:', error)
+    console.error('Error:', error);
     return new Response(
-      JSON.stringify({ 
-        error: 'حدث خطأ أثناء معالجة الصورة',
-        details: error.message 
-      }),
-      { 
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        status: 500
-      }
-    )
+      JSON.stringify({ error: error.message }),
+      { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 }
+    );
   }
-})
+});
+
+async function performOCR(hf: HfInference, imageBase64: string): Promise<string> {
+  try {
+    // Convert base64 to blob
+    const imageBlob = base64ToBlob(imageBase64);
+    
+    // Use Microsoft's Donut model for OCR
+    const result = await hf.textGeneration({
+      model: 'microsoft/donut-base-finetuned-rvlcdip',
+      inputs: imageBlob,
+    });
+
+    return result.generated_text;
+  } catch (error) {
+    console.error('OCR Error:', error);
+    throw new Error('Failed to perform OCR on the image');
+  }
+}
+
+async function analyzeMedicationInfo(text: string) {
+  const API_KEY = Deno.env.get('GIMINAI-AI');
+  
+  try {
+    const response = await fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${API_KEY}`
+      },
+      body: JSON.stringify({
+        contents: [{
+          parts: [{
+            text: `Analyze this medical prescription text and extract the following information in JSON format:
+                   Text: ${text}
+                   
+                   Please extract:
+                   - medication_name: The name of the medication
+                   - dosage: The prescribed dosage
+                   - frequency: How often to take the medication
+                   - instructions: Special instructions for taking the medication`
+          }]
+        }]
+      })
+    });
+
+    const data = await response.json();
+    const analysisText = data.candidates[0].content.parts[0].text;
+    
+    try {
+      return JSON.parse(analysisText);
+    } catch {
+      // If parsing fails, return a structured object with available information
+      return {
+        medication_name: null,
+        dosage: null,
+        frequency: null,
+        instructions: null
+      };
+    }
+  } catch (error) {
+    console.error('Gemini AI Analysis Error:', error);
+    throw new Error('Failed to analyze prescription text');
+  }
+}
+
+async function fetchFDAData(medicationName: string): Promise<OpenFDAResponse['results'][0] | null> {
+  try {
+    const FDA_API_URL = Deno.env.get('OPENFDA_API_URL');
+    const response = await fetch(
+      `${FDA_API_URL}/drug/label.json?search=brand_name:${encodeURIComponent(medicationName)}&limit=1`
+    );
+    
+    if (!response.ok) {
+      throw new Error(`FDA API returned ${response.status}`);
+    }
+
+    const data: OpenFDAResponse = await response.json();
+    return data.results[0] || null;
+  } catch (error) {
+    console.error('FDA API Error:', error);
+    return null;
+  }
+}
+
+function base64ToBlob(base64: string): Blob {
+  const byteString = atob(base64);
+  const arrayBuffer = new ArrayBuffer(byteString.length);
+  const uint8Array = new Uint8Array(arrayBuffer);
+  
+  for (let i = 0; i < byteString.length; i++) {
+    uint8Array[i] = byteString.charCodeAt(i);
+  }
+  
+  return new Blob([arrayBuffer], { type: 'image/jpeg' });
+}
