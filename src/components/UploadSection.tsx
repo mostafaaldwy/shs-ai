@@ -1,18 +1,16 @@
-import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
-import { Upload, Camera, FileText } from "lucide-react";
+
 import { useState } from "react";
 import { useToast } from "@/hooks/use-toast";
-import { useNavigate } from "react-router-dom";
-import { supabase } from "@/integrations/supabase/client";
-import { Progress } from "@/components/ui/progress";
+import { Card } from "@/components/ui/card";
 import { CameraCapture } from "./CameraCapture";
 import { ImageCropper } from "./ImageCropper";
 import { ImageConfirmation } from "./ImageConfirmation";
+import { UploadOptions } from "./prescription/UploadOptions";
+import { AnalysisProgress } from "./prescription/AnalysisProgress";
+import { usePrescriptionAnalyzer } from "./prescription/PrescriptionAnalyzer";
 
 export const UploadSection = () => {
   const { toast } = useToast();
-  const navigate = useNavigate();
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [progress, setProgress] = useState(0);
   const [statusMessage, setStatusMessage] = useState("");
@@ -22,6 +20,12 @@ export const UploadSection = () => {
   const [isConfirmationOpen, setIsConfirmationOpen] = useState(false);
   const [selectedImage, setSelectedImage] = useState<string>("");
   const [croppedImage, setCroppedImage] = useState<string>("");
+
+  const { analyzePrescription } = usePrescriptionAnalyzer({
+    setIsAnalyzing,
+    setProgress,
+    setStatusMessage
+  });
 
   const handleCameraCapture = (imageUrl: string) => {
     setSelectedImage(imageUrl);
@@ -62,83 +66,6 @@ export const UploadSection = () => {
     setIsConfirmationOpen(false);
   };
 
-  const analyzePrescription = async (imageData: string) => {
-    const { data: { user } } = await supabase.auth.getUser();
-    
-    if (!user) {
-      toast({
-        variant: "destructive",
-        title: "يجب تسجيل الدخول",
-        description: "يرجى تسجيل الدخول لاستخدام هذه الخدمة",
-      });
-      navigate("/auth");
-      return;
-    }
-
-    setIsAnalyzing(true);
-    setProgress(10);
-    setStatusMessage("جاري تحميل الصورة...");
-    
-    try {
-      setProgress(20);
-      setStatusMessage("جاري حفظ الصورة...");
-      
-      const { data: prescriptionData, error } = await supabase
-        .from("Patient name")
-        .insert({
-          "Medical prescription": "جاري التحليل...",
-          describe: "تحليل الوصفة الطبية",
-          user_id: user.id
-        })
-        .select()
-        .single();
-
-      if (error) throw error;
-
-      setProgress(40);
-      setStatusMessage("جاري تحليل الوصفة والبحث عن معلومات الدواء...");
-      
-      const { data: analysisData, error: analysisError } = await supabase.functions
-        .invoke('analyze-prescription', {
-          body: { 
-            imageBase64: imageData,
-            prescriptionId: prescriptionData.id
-          }
-        });
-
-      if (analysisError) throw analysisError;
-
-      setProgress(100);
-      setStatusMessage("اكتمل التحليل!");
-      
-      toast({
-        title: "تم تحليل الوصفة الطبية بنجاح",
-        description: "تم استخراج المعلومات الطبية ومعلومات الدواء",
-      });
-
-      navigate("/prescription-details", {
-        state: {
-          prescriptionId: prescriptionData.id,
-          prescriptionData: {
-            detectedText: analysisData.medication_name,
-            analysis: analysisData.drug_info
-          }
-        }
-      });
-    } catch (error) {
-      console.error("Error analyzing prescription:", error);
-      toast({
-        variant: "destructive",
-        title: "حدث خطأ",
-        description: error.message || "لم نتمكن من تحليل الوصفة الطبية. يرجى المحاولة مرة أخرى.",
-      });
-    } finally {
-      setIsAnalyzing(false);
-      setProgress(0);
-      setStatusMessage("");
-    }
-  };
-
   const handleConfirm = () => {
     setIsConfirmationOpen(false);
     analyzePrescription(croppedImage);
@@ -155,60 +82,17 @@ export const UploadSection = () => {
             </p>
           </div>
           
-          {isAnalyzing && (
-            <div className="space-y-4">
-              <Progress value={progress} className="w-full" />
-              <p className="text-center text-primary">{statusMessage}</p>
-            </div>
-          )}
+          <AnalysisProgress 
+            isAnalyzing={isAnalyzing}
+            progress={progress}
+            statusMessage={statusMessage}
+          />
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-8">
-            <Button
-              variant="outline"
-              className="h-32 flex flex-col items-center justify-center space-y-2 border-2 border-dashed hover:border-primary hover:bg-primary/5"
-              onClick={() => setIsCameraOpen(true)}
-              disabled={isAnalyzing}
-            >
-              <Camera className="h-8 w-8 text-primary" />
-              <span>التقاط صورة</span>
-            </Button>
-
-            <Button
-              variant="outline"
-              className="h-32 flex flex-col items-center justify-center space-y-2 border-2 border-dashed hover:border-primary hover:bg-primary/5"
-              onClick={() => document.getElementById("image-input")?.click()}
-              disabled={isAnalyzing}
-            >
-              <Upload className="h-8 w-8 text-primary" />
-              <span>تحميل صورة</span>
-              <input
-                id="image-input"
-                type="file"
-                accept="image/*"
-                className="hidden"
-                onChange={handleFilePick}
-                disabled={isAnalyzing}
-              />
-            </Button>
-
-            <Button
-              variant="outline"
-              className="h-32 flex flex-col items-center justify-center space-y-2 border-2 border-dashed hover:border-primary hover:bg-primary/5"
-              onClick={() => document.getElementById("file-input")?.click()}
-              disabled={isAnalyzing}
-            >
-              <FileText className="h-8 w-8 text-primary" />
-              <span>تحميل ملف</span>
-              <input
-                id="file-input"
-                type="file"
-                accept=".pdf,image/*"
-                className="hidden"
-                onChange={handleFilePick}
-                disabled={isAnalyzing}
-              />
-            </Button>
-          </div>
+          <UploadOptions
+            onCameraClick={() => setIsCameraOpen(true)}
+            onFileSelect={handleFilePick}
+            isAnalyzing={isAnalyzing}
+          />
         </div>
       </Card>
 
