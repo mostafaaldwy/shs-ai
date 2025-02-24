@@ -1,4 +1,3 @@
-
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Upload, Camera, FileText } from "lucide-react";
@@ -18,7 +17,6 @@ export const UploadSection = () => {
   const [progress, setProgress] = useState(0);
   const [statusMessage, setStatusMessage] = useState("");
   
-  // New state for managing dialogs
   const [isCameraOpen, setIsCameraOpen] = useState(false);
   const [isCropperOpen, setIsCropperOpen] = useState(false);
   const [isConfirmationOpen, setIsConfirmationOpen] = useState(false);
@@ -82,7 +80,6 @@ export const UploadSection = () => {
     setStatusMessage("جاري تحميل الصورة...");
     
     try {
-      // Save prescription to Supabase first
       setProgress(20);
       setStatusMessage("جاري حفظ الصورة...");
       
@@ -99,9 +96,8 @@ export const UploadSection = () => {
       if (error) throw error;
 
       setProgress(40);
-      setStatusMessage("جاري تحليل الوصفة...");
+      setStatusMessage("جاري تحليل الوصفة والبحث عن معلومات الدواء...");
       
-      // Call edge function to analyze the image
       const { data: analysisData, error: analysisError } = await supabase.functions
         .invoke('analyze-prescription', {
           body: { 
@@ -117,7 +113,7 @@ export const UploadSection = () => {
       
       toast({
         title: "تم تحليل الوصفة الطبية بنجاح",
-        description: "تم استخراج المعلومات الطبية",
+        description: "تم استخراج المعلومات الطبية ومعلومات الدواء",
       });
 
       navigate("/prescription-details", {
@@ -125,7 +121,7 @@ export const UploadSection = () => {
           prescriptionId: prescriptionData.id,
           prescriptionData: {
             detectedText: analysisData.medication_name,
-            analysis: analysisData
+            analysis: analysisData.drug_info
           }
         }
       });
