@@ -25,7 +25,7 @@ async function analyzeImage(imageBase64: string) {
       Format: DrugName - DosageForm. Return comma-separated values. Example: Paracetamol - Tablet. 
       Use full names, no abbreviations. Remove 'drug' word if exists.`;
 
-    const result = await visionModel.generateContent([prompt, imagePart]);
+    const result = await visionModel.generateContent([imagePart,prompt]);
     const text = result.response.text();
     return text.split(",").map(entry => entry.trim()).filter(entry => entry);
   } catch (error) {
