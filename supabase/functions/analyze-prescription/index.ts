@@ -106,12 +106,12 @@ serve(async (req) => {
     const drugInfoResults = (await Promise.all(drugInfoPromises)).filter(Boolean);
 
     // Generate patient analysis
-    const analysis = await generateAnalysis(drugInfoResults, age, gender);
+    const analysis = await generateAnalysis(drugInfoResults);
 
     // Update database
     const supabase = createClient(
       Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_ANON_KEY")!
+      Deno.env.get("SUPABASE_PUBLISHABLE_KEY")!
     );
 
     const { error } = await supabase
