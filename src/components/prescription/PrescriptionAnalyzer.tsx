@@ -1,4 +1,3 @@
-
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { useNavigate } from "react-router-dom";
@@ -18,6 +17,7 @@ export const usePrescriptionAnalyzer = ({
   const navigate = useNavigate();
 
   const analyzePrescription = async (imageData: string) => {
+    // Step 1: Check if user is authenticated
     const { data: { user } } = await supabase.auth.getUser();
     
     if (!user) {
@@ -35,10 +35,11 @@ export const usePrescriptionAnalyzer = ({
     setStatusMessage("جاري تحميل الصورة...");
     
     try {
+      // Step 2: Save the prescription to the database
       setProgress(20);
       setStatusMessage("جاري حفظ الصورة...");
       
-      const { data: prescriptionData, error } = await supabase
+      const { data: prescriptionData, error: insertError } = await supabase
         .from("Patient name")
         .insert({
           "Medical prescription": "جاري التحليل...",
@@ -48,21 +49,26 @@ export const usePrescriptionAnalyzer = ({
         .select()
         .single();
 
-      if (error) throw error;
+      if (insertError) throw insertError;
 
+      // Step 3: Call the edge function to analyze the prescription
       setProgress(40);
       setStatusMessage("جاري تحليل الوصفة والبحث عن معلومات الدواء...");
       
       const { data: analysisData, error: analysisError } = await supabase.functions
         .invoke('analyze-prescription', {
-          body: { 
+          body: JSON.stringify({ 
             imageBase64: imageData,
             prescriptionId: prescriptionData.id
-          }
+          }),
+          headers: {
+            "Content-Type": "application/json",
+          },
         });
 
       if (analysisError) throw analysisError;
 
+      // Step 4: Update progress and show success message
       setProgress(100);
       setStatusMessage("اكتمل التحليل!");
       
@@ -71,6 +77,7 @@ export const usePrescriptionAnalyzer = ({
         description: "تم استخراج المعلومات الطبية ومعلومات الدواء",
       });
 
+      // Step 5: Navigate to the prescription details page
       navigate("/prescription-details", {
         state: {
           prescriptionId: prescriptionData.id,
