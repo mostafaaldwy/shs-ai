@@ -2,77 +2,31 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { GoogleGenerativeAI } from "https://esm.sh/@google/generative-ai";
 
+// Constants
 const OPENFDA_API_URL = "https://api.fda.gov/drug/label.json";
-const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY");
+const GEMINI_API_KEY = "AIzaSyDx_ic-Nvad9kdNbI1Hbw_PwHn05AIaA0I"; // Replace with your actual API key
 const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
 const visionModel = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
 
-const CLASS_TO_GENERIC: { [key: string]: string[] } = {
-  "Antibiotic": ["Amoxicillin", "Ciprofloxacin"],
-  "Antihistamine": ["Cetirizine", "Loratadine"],
-};
-
-async function analyzeImage(imageBase64: string) {
-  try {
-    const imagePart = {
-      inlineData: {
-        data: imageBase64,
-        mimeType: "image/jpeg",
-      },
-    };
-
-    const prompt = `This is a prescription. Extract drug names or class names with dosage forms. 
-      Format: DrugName - DosageForm. Return comma-separated values. Example: Paracetamol - Tablet. 
-      Use full names, no abbreviations. Remove 'drug' word if exists.`;
-
-    const result = await visionModel.generateContent([imagePart,prompt]);
-    const text = result.response.text();
-    return text.split(",").map(entry => entry.trim()).filter(entry => entry);
-  } catch (error) {
-    console.error("Gemini Error:", error);
-    throw new Error("Failed to analyze prescription image");
-  }
-}
-
-async function generateAnalysis(drugInfo: any[]) {
-  try {
-    const prompt = `Analyze this drug information  in Arabic:
-      ${JSON.stringify(drugInfo)}
-      
-      Provide brief bullet points in Arabic using this format:
-      • الجرعة: [dosage]
-      • التحذيرات العمرية: [age warnings]
-      • احتياطات الجنس: [gender precautions]
-      • الآثار الجانبية: [side effects]
-      • التفاعلات الدوائية: [interactions]`;
-
-    const result = await visionModel.generateContent(prompt);
-    return result.response.text();
-  } catch (error) {
-    console.error("Analysis Generation Error:", error);
-    throw new Error("Failed to generate patient analysis");
-  }
-}
-
+// Function to fetch drug information from OpenFDA
 async function fetchDrugInfo(name: string) {
   try {
     const params = new URLSearchParams({
-      search: `(generic_name:"${name}" OR brand_name:"${name}")`,
+      search: `(generic_name:"${name}" + nd_name:"${name}")`,
       limit: "1",
-      sort: "effective_time:desc"
     });
-    
+
     const response = await fetch(`${OPENFDA_API_URL}?${params}`);
     if (response.status === 200) {
       const data = await response.json();
-      if (data.results?.length > 0) {
+      if (data.results && data.results.length > 0) {
         const drug = data.results[0];
         return {
           name: drug.openfda?.generic_name?.[0] || name,
-          uses: drug.indications_and_usage || ['N/A'],
-          warnings: drug.warnings || ['N/A'],
-          dosage: drug.dosage_and_administration || ['N/A'],
-          interactions: drug.drug_interactions || ['N/A']
+          dosage: drug.dosage_and_administration?.[0] || "N/A",
+          frequency: drug.frequency_of_use?.[0] || "N/A",
+          instructions: drug.instructions_for_use?.[0] || "N/A",
+          side_effects: drug.warnings?.[0] || "N/A",
         };
       }
     }
@@ -83,62 +37,108 @@ async function fetchDrugInfo(name: string) {
   }
 }
 
+// Function to analyze the prescription image
+async function analyzeImage(imageBase64: string) {
+  try {
+    const imagePart = {
+      inlineData: {
+        data: imageBase64,
+        mimeType: "image/jpeg",
+      },
+    };
+
+    const prompt = `This is a prescription. Extract drug names or class names. 
+      Format: DrugName - DosageForm. Return comma-separated values. Example: Paracetamol. 
+      Use full names, no abbreviations. Remove 'drug' word if exists.`;
+
+    const result = await visionModel.generateContent([prompt, imagePart]);
+    const text = result.response.text();
+    return text.split(",").map(entry => entry.trim()).filter(entry => entry);
+  } catch (error) {
+    console.error("Gemini Error:", error);
+    throw new Error("Failed to analyze prescription image");
+  }
+}
+
+// Function to parse the AI's response into structured data
+function parsePrescriptionInfo(analysis: string) {
+  // Define regex patterns to extract each section
+  const dosagePattern = /• الجرعة: (.+)/;
+  const frequencyPattern = /• التكرار: (.+)/;
+  const instructionsPattern = /• التعليمات: (.+)/;
+  const sideEffectsPattern = /• الآثار الجانبية: (.+)/;
+
+  // Extract data using regex
+  const dosageMatch = analysis.match(dosagePattern);
+  const frequencyMatch = analysis.match(frequencyPattern);
+  const instructionsMatch = analysis.match(instructionsPattern);
+  const sideEffectsMatch = analysis.match(sideEffectsPattern);
+
+  // Return structured data
+  return {
+    dosage: dosageMatch ? dosageMatch[1].trim() : "N/A",
+    frequency: frequencyMatch ? frequencyMatch[1].trim() : "N/A",
+    instructions: instructionsMatch ? instructionsMatch[1].trim() : "N/A",
+    side_effects: sideEffectsMatch ? sideEffectsMatch[1].trim() : "N/A",
+  };
+}
+
+// Main server function
 serve(async (req) => {
   try {
-    const { imageBase64, prescriptionId, age, gender } = await req.json();
-    
-    // Analyze prescription image
-    const drugEntries = await analyzeImage(imageBase64);
-    const resolvedNames: string[] = [];
-    
-    // Process drug entries
-    for (const entry of drugEntries) {
-      if (entry.includes(" - ")) {
-        const [name, dosage] = entry.split(" - ");
-        resolvedNames.push(...CLASS_TO_GENERIC[name] || [name]);
-      } else {
-        resolvedNames.push(entry);
-      }
-    }
+    const { imageBase64, prescriptionId } = await req.json();
 
-    // Fetch drug information
-    const drugInfoPromises = resolvedNames.map(fetchDrugInfo);
+    // Step 1: Analyze prescription image
+    const medicationNames = await analyzeImage(imageBase64);
+
+    // Step 2: Fetch drug information for each medication
+    const drugInfoPromises = medicationNames.map(fetchDrugInfo);
     const drugInfoResults = (await Promise.all(drugInfoPromises)).filter(Boolean);
 
-    // Generate patient analysis
-    const analysis = await generateAnalysis(drugInfoResults);
+    // Step 3: Parse the drug information into structured format
+    const structuredData = drugInfoResults.map((drug) => ({
+      medication_name: drug.name,
+      dosage: drug.dosage,
+      frequency: drug.frequency,
+      instructions: drug.instructions,
+      side_effects: drug.side_effects,
+    }));
 
-    // Update database
-    const supabase = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_PUBLISHABLE_KEY")!
+    // Step 4: Update the database
+    const supabaseClient = createClient(
+      Deno.env.get("SUPABASE_URL") ?? "",
+      Deno.env.get("SUPABASE_ANON_KEY") ?? ""
     );
 
-    const { error } = await supabase
-      .from("prescriptions")
+    const { error: updateError } = await supabaseClient
+      .from("Patient name")
       .update({
-        medications: resolvedNames,
-        drug_info: drugInfoResults,
-        analysis: analysis,
-        status: "completed"
+        medication_name: structuredData[0].medication_name, // Assuming single medication for simplicity
+        dosage: structuredData[0].dosage,
+        frequency: structuredData[0].frequency,
+        instructions: structuredData[0].instructions,
+        side_effects: structuredData[0].side_effects,
+        analysis_complete: true,
       })
       .eq("id", prescriptionId);
 
-    if (error) throw error;
+    if (updateError) throw updateError;
 
+    // Step 5: Return success response
     return new Response(
-      JSON.stringify({ 
-        medications: resolvedNames,
-        analysis: analysis,
-        drug_info: drugInfoResults 
+      JSON.stringify({
+        success: true,
+        data: structuredData,
       }),
       { headers: { "Content-Type": "application/json" } }
     );
-
   } catch (error) {
     console.error("Server Error:", error);
     return new Response(
-      JSON.stringify({ error: error.message }),
+      JSON.stringify({
+        success: false,
+        error: error.message,
+      }),
       { status: 500, headers: { "Content-Type": "application/json" } }
     );
   }
