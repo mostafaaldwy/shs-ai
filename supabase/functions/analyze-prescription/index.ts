@@ -4,7 +4,7 @@ import { GoogleGenerativeAI } from "https://esm.sh/@google/generative-ai";
 
 // Constants
 const OPENFDA_API_URL = "https://api.fda.gov/drug/label.json";
-const GEMINI_API_KEY = "AIzaSyDx_ic-Nvad9kdNbI1Hbw_PwHn05AIaA0I"; // Replace with your actual API key
+const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY"); // Ensure this is set in your environment
 const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
 const visionModel = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
 
@@ -58,29 +58,6 @@ async function analyzeImage(imageBase64: string) {
     console.error("Gemini Error:", error);
     throw new Error("Failed to analyze prescription image");
   }
-}
-
-// Function to parse the AI's response into structured data
-function parsePrescriptionInfo(analysis: string) {
-  // Define regex patterns to extract each section
-  const dosagePattern = /• الجرعة: (.+)/;
-  const frequencyPattern = /• التكرار: (.+)/;
-  const instructionsPattern = /• التعليمات: (.+)/;
-  const sideEffectsPattern = /• الآثار الجانبية: (.+)/;
-
-  // Extract data using regex
-  const dosageMatch = analysis.match(dosagePattern);
-  const frequencyMatch = analysis.match(frequencyPattern);
-  const instructionsMatch = analysis.match(instructionsPattern);
-  const sideEffectsMatch = analysis.match(sideEffectsPattern);
-
-  // Return structured data
-  return {
-    dosage: dosageMatch ? dosageMatch[1].trim() : "N/A",
-    frequency: frequencyMatch ? frequencyMatch[1].trim() : "N/A",
-    instructions: instructionsMatch ? instructionsMatch[1].trim() : "N/A",
-    side_effects: sideEffectsMatch ? sideEffectsMatch[1].trim() : "N/A",
-  };
 }
 
 // Main server function
