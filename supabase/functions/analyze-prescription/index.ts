@@ -1,26 +1,76 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from '@supabase/supabase-js';
-import type { Database } from './types';
-import { GoogleGenerativeAI } from "https://@google/generative-ai";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { GoogleGenerativeAI } from "https://esm.sh/@google/generative-ai";
 
 // Constants
 const OPENFDA_API_URL = "https://api.fda.gov/drug/label.json";
-const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY"); // Ensure this is set in your environment
+const GEMINI_API_KEY = Deno.env.get("GIMINAI-AI");
 const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
 const visionModel = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
 
-// Function to fetch drug information from OpenFDA
+const CLASS_TO_GENERIC: { [key: string]: string[] } = {
+  "Antibiotic": ["Amoxicillin", "Ciprofloxacin"],
+  "Antihistamine": ["Cetirizine", "Loratadine"],
+};
+
+// CORS Configuration
+const allowedOrigins = ["http://localhost:8080","*"];
+const allowedMethods = "POST, OPTIONS";
+const allowedHeaders = "Content-Type";
+
+async function analyzeImage(imageBase64: string) {
+  try {
+    const imagePart = {
+      inlineData: {
+        data: imageBase64,
+        mimeType: "image/jpeg",
+      },
+    };
+
+    const prompt = `This is a prescription. Extract drug names or class names with dosage forms. 
+      Format: DrugName. Return comma-separated values. Example: Paracetamol. 
+      Use full names, no abbreviations. Remove 'drug' word if exists.`;
+
+    const result = await visionModel.generateContent([prompt, ...imagePart]);
+    const text = result.response.text();
+    return text.split(",").map(entry => entry.trim()).filter(entry => entry);
+  } catch (error) {
+    console.error("Gemini Error:", error);
+    throw new Error("Failed to analyze prescription image");
+  }
+}
+
+async function generateAnalysis(drugInfo: any[], age: number, gender: string) {
+  try {
+    const prompt = `Analyze this drug information for a ${age}-year-old ${gender} in Arabic:
+      ${JSON.stringify(drugInfo)}
+      
+      Provide brief bullet points in Arabic using this format:
+      • الجرعة: [dosage]
+      • التحذيرات العمرية: [age warnings]
+      • احتياطات الجنس: [gender precautions]
+      • الآثار الجانبية: [side effects]
+      • التفاعلات الدوائية: [interactions]`;
+
+    const result = await visionModel.generateContent(prompt);
+    return result.response.text();
+  } catch (error) {
+    console.error("Analysis Generation Error:", error);
+    throw new Error("Failed to generate patient analysis");
+  }
+}
+
 async function fetchDrugInfo(name: string) {
   try {
     const params = new URLSearchParams({
-      search: `(generic_name:"${name}" + nd_name:"${name}")`,
+      search: `(generic_name:"${name}" OR brand_name:"${name}")`,
       limit: "1",
     });
 
     const response = await fetch(`${OPENFDA_API_URL}?${params}`);
     if (response.status === 200) {
       const data = await response.json();
-      if (data.results && data.results.length > 0) {
+      if (data.results?.length > 0) {
         const drug = data.results[0];
         return {
           name: drug.openfda?.generic_name?.[0] || name,
@@ -38,86 +88,94 @@ async function fetchDrugInfo(name: string) {
   }
 }
 
-// Function to analyze the prescription image
-async function analyzeImage(imageBase64: string) {
-  try {
-    const imagePart = {
-      inlineData: {
-        data: imageBase64,
-        mimeType: "image/jpeg",
-      },
-    };
-
-    const prompt = `This is a prescription. Extract drug names or class names. 
-      Format: DrugName - DosageForm. Return comma-separated values. Example: Paracetamol. 
-      Use full names, no abbreviations. Remove 'drug' word if exists.`;
-
-    const result = await visionModel.generateContent([prompt, imagePart]);
-    const text = result.response.text();
-    return text.split(",").map(entry => entry.trim()).filter(entry => entry);
-  } catch (error) {
-    console.error("Gemini Error:", error);
-    throw new Error("Failed to analyze prescription image");
-  }
-}
-
-// Main server function
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-
-// Constants
-const allowedOrigins = ["http://localhost:8080"]; // Add your frontend URL(s) here
-const allowedMethods = "POST, OPTIONS";
-const allowedHeaders = "Content-Type";
-
-// Main server function
 serve(async (req: Request) => {
   const origin = req.headers.get("Origin") || "";
 
-  // Handle CORS preflight requests (OPTIONS)
+  // Handle CORS preflight
   if (req.method === "OPTIONS") {
     if (allowedOrigins.includes(origin) || allowedOrigins.includes("*")) {
       return new Response(null, {
         headers: {
-          "Access-Control-Allow-Origin": origin, // Echo the origin
+          "Access-Control-Allow-Origin": origin,
           "Access-Control-Allow-Methods": allowedMethods,
           "Access-Control-Allow-Headers": allowedHeaders,
         },
       });
-    } else {
-      return new Response("CORS Preflight Error: Origin Not Allowed", { status: 403 });
     }
+    return new Response("CORS Preflight Error", { status: 403 });
   }
 
   // Handle POST requests
   if (req.method === "POST") {
     try {
-      const { imageBase64, prescriptionId } = await req.json();
-
-      // Validate inputs
-      if (!imageBase64 || !prescriptionId) {
-        return new Response(JSON.stringify({ error: 'Missing required fields' }), {
-          status: 400,
-          headers: { 'Content-Type': 'application/json' },
-        });
+      const { imageBase64, prescriptionId, age, gender } = await req.json();
+      
+      // Analyze prescription image
+      const drugEntries = await analyzeImage(imageBase64);
+      const resolvedNames: string[] = [];
+      
+      // Process drug entries
+      for (const entry of drugEntries) {
+        if (entry.includes(" - ")) {
+          const [name, dosage] = entry.split(" - ");
+          resolvedNames.push(...CLASS_TO_GENERIC[name] || [name]);
+        } else {
+          resolvedNames.push(entry);
+        }
       }
-      console.log("Received request with prescriptionId:", prescriptionId);
 
-      // Step 1: Analyze prescription image
-      const medicationNames = await analyzeImage(imageBase64);
-      console.log("Extracted medication names:", medicationNames);
-
-      // Step 2: Fetch drug information for each medication
-      const drugInfoPromises = medicationNames.map(fetchDrugInfo);
+      // Fetch drug information
+      const drugInfoPromises = resolvedNames.map(fetchDrugInfo);
       const drugInfoResults = (await Promise.all(drugInfoPromises)).filter(Boolean);
-      console.log("Fetched drug info:", drugInfoResults);
 
-      // Step 3: Parse
-  } catch (error) {
-    console.error("Error in Edge Function:", error);
-    return new Response(JSON.stringify({ error: error.message }), {
-      status: 500,
-      headers: { "Content-Type": "application/json" },
-    });
+      // Generate patient analysis
+      const analysis = await generateAnalysis(drugInfoResults, age, gender);
+
+      // Update database
+      const supabase = createClient(
+        Deno.env.get("SUPABASE_URL")!,
+        Deno.env.get("SUPABASE_ANON_KEY")!
+      );
+
+      const { error } = await supabase
+        .from("prescriptions")
+        .update({
+          medications: resolvedNames,
+          drug_info: drugInfoResults,
+          analysis: analysis,
+          status: "completed"
+        })
+        .eq("id", prescriptionId);
+
+      if (error) throw error;
+
+      return new Response(
+        JSON.stringify({ 
+          medications: resolvedNames,
+          analysis: analysis,
+          drug_info: drugInfoResults 
+        }),
+        { 
+          headers: { 
+            "Content-Type": "application/json",
+            "Access-Control-Allow-Origin": "*"
+          } 
+        }
+      );
+    } catch (error) {
+      console.error("Server Error:", error);
+      return new Response(
+        JSON.stringify({ error: error.message }),
+        { 
+          status: 500, 
+          headers: { 
+            "Content-Type": "application/json",
+            "Access-Control-Allow-Origin": allowedOrigins.includes(origin) ? origin : ""
+          } 
+        }
+      );
+    }
   }
+
+  return new Response("Method Not Allowed", { status: 405 });
 });
