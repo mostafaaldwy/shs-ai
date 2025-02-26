@@ -40,9 +40,9 @@ async function analyzeImage(imageBase64: string) {
   }
 }
 
-async function generateAnalysis(drugInfo: any[], age: number, gender: string) {
+async function generateAnalysis(drugInfo: any[]) {
   try {
-    const prompt = `Analyze this drug information for a ${age}-year-old ${gender} in Arabic:
+    const prompt = `Analyze this drug information in Arabic:
       ${JSON.stringify(drugInfo)}
       
       Provide brief bullet points in Arabic using this format:
@@ -108,7 +108,7 @@ serve(async (req: Request) => {
   // Handle POST requests
   if (req.method === "POST") {
     try {
-      const { imageBase64, prescriptionId, age, gender } = await req.json();
+      const { imageBase64, prescriptionId } = await req.json();
       
       // Analyze prescription image
       const drugEntries = await analyzeImage(imageBase64);
