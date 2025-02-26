@@ -86,10 +86,16 @@ serve(async (req: Request) => {
   }
   try {
     const { imageBase64, prescriptionId } = await req.json();
+     if (!imageBase64 || !prescriptionId) {
+        return new Response(JSON.stringify({ error: 'Missing required fields' }), {
+          status: 400,
+          headers: { 'Content-Type': 'application/json' },
+        });
     console.log("Received request with prescriptionId:", prescriptionId);
 
     // Step 1: Analyze prescription image
     const medicationNames = await analyzeImage(imageBase64);
+    
     console.log("Extracted medication names:", medicationNames);
 
     // Step 2: Fetch drug information for each medication
