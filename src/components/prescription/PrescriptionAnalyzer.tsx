@@ -64,6 +64,7 @@ export const usePrescriptionAnalyzer = ({
           headers: {
             "Content-Type": "application/json",
           },
+          status: 200,
         });
 
       if (analysisError) throw analysisError;
