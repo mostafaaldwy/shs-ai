@@ -62,15 +62,29 @@ async function analyzeImage(imageBase64: string) {
 
 // Main server function
 serve(async (req) => {
+  // Handle CORS preflight requests
+  if (req.method === "OPTIONS") {
+    return new Response(null, {
+      headers: {
+        "Access-Control-Allow-Origin": "*",
+        "Access-Control-Allow-Methods": "POST, OPTIONS",
+        "Access-Control-Allow-Headers": "Content-Type",
+      },
+    });
+  }
+
   try {
     const { imageBase64, prescriptionId } = await req.json();
+    console.log("Received request with prescriptionId:", prescriptionId);
 
     // Step 1: Analyze prescription image
     const medicationNames = await analyzeImage(imageBase64);
+    console.log("Extracted medication names:", medicationNames);
 
     // Step 2: Fetch drug information for each medication
     const drugInfoPromises = medicationNames.map(fetchDrugInfo);
     const drugInfoResults = (await Promise.all(drugInfoPromises)).filter(Boolean);
+    console.log("Fetched drug info:", drugInfoResults);
 
     // Step 3: Parse the drug information into structured format
     const structuredData = drugInfoResults.map((drug) => ({
@@ -80,6 +94,7 @@ serve(async (req) => {
       instructions: drug.instructions,
       side_effects: drug.side_effects,
     }));
+    console.log("Structured data:", structuredData);
 
     // Step 4: Update the database
     const supabaseClient = createClient(
@@ -100,6 +115,7 @@ serve(async (req) => {
       .eq("id", prescriptionId);
 
     if (updateError) throw updateError;
+    console.log("Database updated successfully");
 
     // Step 5: Return success response
     return new Response(
@@ -107,16 +123,8 @@ serve(async (req) => {
         success: true,
         data: structuredData,
       }),
-      { headers: { "Content-Type": "application/json" } }
-    );
-  } catch (error) {
-    console.error("Server Error:", error);
-    return new Response(
-      JSON.stringify({
-        success: false,
-        error: error.message,
-      }),
-      { status: 500, headers: { "Content-Type": "application/json" } }
-    );
-  }
-});
+      {
+        headers: {
+          "Content-Type": "application/json",
+          "Access-Control-Allow-Origin": "*",
+          "
