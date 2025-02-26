@@ -61,18 +61,29 @@ async function analyzeImage(imageBase64: string) {
 }
 
 // Main server function
-serve(async (req) => {
-  // Handle CORS preflight requests
-  if (req.method === "OPTIONS") {
-    return new Response(null, {
-      headers: {
-        "Access-Control-Allow-Origin": "*",
-        "Access-Control-Allow-Methods": "POST, OPTIONS",
-        "Access-Control-Allow-Headers": "Content-Type",
-      },
-    });
-  }
+serve(async (req: Request) => {
+  const allowedOrigins = ["*"]; // Or, MUCH BETTER, list your specific origins!
+  const allowedMethods = "POST";
+  const allowedHeaders = "Content-Type";
 
+  const origin = req.headers.get("Origin"); // Get the Origin header from the request
+
+  // Handle CORS preflight requests (OPTIONS)
+  if (req.method === "OPTIONS") {
+    if (origin && allowedOrigins.includes(origin) || allowedOrigins.includes("*")) {
+      return new Response(null, {
+        headers: {
+          "Access-Control-Allow-Origin": origin || "*", // Echo the origin!
+          "Access-Control-Allow-Methods": allowedMethods,
+          "Access-Control-Allow-Headers": allowedHeaders,
+          "Access-Control-Allow-Credentials": "true", // If needed
+          "Access-Control-Max-Age": "86400", // Optional
+        },
+      });
+    } else {
+      return new Response("CORS Preflight Error: Origin Not Allowed", { status: 403 });
+    }
+  }
   try {
     const { imageBase64, prescriptionId } = await req.json();
     console.log("Received request with prescriptionId:", prescriptionId);
@@ -118,7 +129,7 @@ serve(async (req) => {
     console.log("Database updated successfully");
 
     // Step 5: Return success response
-    return new Response(
+     return new Response(
       JSON.stringify({
         success: true,
         data: structuredData,
@@ -126,5 +137,19 @@ serve(async (req) => {
       {
         headers: {
           "Content-Type": "application/json",
-          "Access-Control-Allow-Origin": "*",
-          "
+          "Access-Control-Allow-Origin": origin || "*", // Echo the origin here as well!
+          "Access-Control-Allow-Methods": "POST",
+          "Access-Control-Allow-Headers": allowedHeaders,
+          "Access-Control-Allow-Credentials": "true", // If needed
+        },
+      }
+    );
+
+  } catch (error) {
+    console.error("Error in Edge Function:", error);
+    return new Response(JSON.stringify({ error: error.message }), {
+      status: 500,
+      headers: { "Content-Type": "application/json" },
+    });
+  }
+});
