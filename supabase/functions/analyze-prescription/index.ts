@@ -1,6 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { GoogleGenerativeAI } from "https://esm.sh/@google/generative-ai";
+import { GoogleGenerativeAI } from "https://@google/generative-ai";
 
 // Constants
 const OPENFDA_API_URL = "https://api.fda.gov/drug/label.json";
@@ -62,7 +62,7 @@ async function analyzeImage(imageBase64: string) {
 
 // Main server function
 serve(async (req: Request) => {
-  const allowedOrigins = ["*"]; // Or, MUCH BETTER, list your specific origins!
+  const allowedOrigins = ["http://localhost:3000"]; // Add your frontend URL
   const allowedMethods = "POST";
   const allowedHeaders = "Content-Type";
 
@@ -84,18 +84,19 @@ serve(async (req: Request) => {
       return new Response("CORS Preflight Error: Origin Not Allowed", { status: 403 });
     }
   }
+
   try {
     const { imageBase64, prescriptionId } = await req.json();
-     if (!imageBase64 || !prescriptionId) {
-        return new Response(JSON.stringify({ error: 'Missing required fields' }), {
-          status: 400,
-          headers: { 'Content-Type': 'application/json' },
-        });
+    if (!imageBase64 || !prescriptionId) {
+      return new Response(JSON.stringify({ error: 'Missing required fields' }), {
+        status: 400,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
     console.log("Received request with prescriptionId:", prescriptionId);
 
     // Step 1: Analyze prescription image
     const medicationNames = await analyzeImage(imageBase64);
-    
     console.log("Extracted medication names:", medicationNames);
 
     // Step 2: Fetch drug information for each medication
@@ -122,11 +123,7 @@ serve(async (req: Request) => {
     const { error: updateError } = await supabaseClient
       .from("Patient name")
       .update({
-        medication_name: structuredData[0].medication_name, // Assuming single medication for simplicity
-        dosage: structuredData[0].dosage,
-        frequency: structuredData[0].frequency,
-        instructions: structuredData[0].instructions,
-        side_effects: structuredData[0].side_effects,
+        medications: structuredData, // Store all medications as an array
         analysis_complete: true,
       })
       .eq("id", prescriptionId);
@@ -135,7 +132,7 @@ serve(async (req: Request) => {
     console.log("Database updated successfully");
 
     // Step 5: Return success response
-     return new Response(
+    return new Response(
       JSON.stringify({
         success: true,
         data: structuredData,
